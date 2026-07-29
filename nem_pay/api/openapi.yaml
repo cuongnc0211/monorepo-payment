@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: NemPay API
+  version: "1.0.0-M1"
+  description: >
+    NemPay direct-capture gateway (Milestone M1). Hand-maintained and kept in step with the
+    handlers in internal/httpapi. Money verbs (confirm/capture/refund) and webhook config are
+    added in later tasks. The M2/M4 merchants generate their clients from this file.
+servers:
+  - url: http://localhost:8080
+    description: Local docker-compose
+
+components:
+  securitySchemes:
+    SecretKey:
+      type: http
+      scheme: bearer
+      description: >
+        A merchant secret key (sk_...) as `Authorization: Bearer <key>`. Required for every
+        payment-intent route. A publishable key (pk_...) authenticates but is refused (403) on
+        these routes.
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message]
+          properties:
+            type:
+              type: string
+              enum: [invalid_request_error, authentication_error, idempotency_error, not_found_error, api_error]
+            code: { type: string, example: invalid_amount }
+            message: { type: string }
+            param: { type: string }
+    PaymentIntent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        object: { type: string, enum: [payment_intent] }
+        amount:
+          type: integer
+          format: int64
+          description: Amount in minor units (e.g. cents). Always positive.
+        currency: { type: string, minLength: 3, maxLength: 3, example: USD }
+        status:
+          type: string
+          enum: [created, requires_confirmation, authorized, captured, settled, failed, refunded, partially_refunded]
+        settlement_mode: { type: string, enum: [direct] }
+        metadata: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateIntentRequest:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, format: int64, minimum: 1 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        metadata: { type: object, additionalProperties: true }
+    IntentList:
+      type: object
+      properties:
+        object: { type: string, enum: [list] }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PaymentIntent' }
+
+paths:
+  /v1/health:
+    get:
+      summary: Liveness check (public, no auth)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /v1/payment_intents:
+    post:
+      summary: Create a payment intent
+      security: [{ SecretKey: [] }]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required on every money-mutating POST; retries replay the stored response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIntentRequest' }
+      responses:
+        '200':
+          description: Created intent (status = created)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Missing/invalid key, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Publishable key used, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: A request with this Idempotency-Key is still in flight, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: Idempotency-Key reused with a different body, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      summary: List payment intents (newest first)
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+        - { in: query, name: offset, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A list of intents
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntentList' }
+
+  /v1/payment_intents/{id}:
+    get:
+      summary: Retrieve a payment intent
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The intent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
