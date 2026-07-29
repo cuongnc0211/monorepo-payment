@@ -1,0 +1,29 @@
+# --- Secrets: never commit (this repo is public) ---
+# Rails credentials encryption key (not covered by the Rails app's own .gitignore in Rails 8).
+**/config/master.key
+**/config/credentials/*.key
+*.pem
+# Real environment files; the committed *.env.example templates document the variables.
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+
+# --- macOS ---
+.DS_Store
+**/.DS_Store
+
+# --- Editors ---
+.idea/
+.vscode/
+*.swp
+
+# --- Claude Code local settings (keep the shared sdd commands, drop local prefs) ---
+.claude/settings.local.json
+
+# --- Go build artifacts ---
+nem_pay/bank-sim/banksim
+nem_pay/api/api
+nem_pay/api/worker
+nem_pay/api/bin/
