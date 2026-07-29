@@ -1,0 +1,98 @@
+name: nempay
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nempay
+      POSTGRES_PASSWORD: nempay
+      POSTGRES_DB: nempay
+    ports:
+      - "${NEMPAY_PG_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nempay -d nempay"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${NEMPAY_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: apply migrations before the api starts. In M1.0 there are none yet, so we skip
+  # cleanly when no .sql files are present; once migrations exist, real errors fail hard.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./api/db/migrations:/migrations:ro
+    environment:
+      DB_URL: "postgres://nempay:nempay@postgres:5432/nempay?sslmode=disable"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        if ls /migrations/*.sql >/dev/null 2>&1; then
+        migrate -path=/migrations -database="$$DB_URL" up;
+        else echo "no migrations yet — skipping"; fi
+
+  api:
+    build: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8080"
+      DB_URL: "postgres://nempay:nempay@postgres:5432/nempay?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      BANKSIM_URL: "http://bank-sim:9090"
+      # Local dev only: seed a known merchant + API keys so the gateway is curl-drivable with
+      # no merchant app present. The keys are printed in the api logs on boot.
+      NEMPAY_DEV_SEED: "1"
+      # Register the dev merchant's webhook endpoint so events reach a merchant app (e.g. NemLuxury)
+      # running on the host. host.docker.internal reaches the host from inside the container (Docker
+      # Desktop; on Linux add an extra_hosts mapping). The secret MUST match the merchant's
+      # NEMPAY_WEBHOOK_SECRET.
+      NEMPAY_DEV_WEBHOOK_URL: "${NEMPAY_DEV_WEBHOOK_URL:-http://host.docker.internal:3000/webhooks/nem_pay}"
+      NEMPAY_DEV_WEBHOOK_SECRET: "${NEMPAY_DEV_WEBHOOK_SECRET:-whsec_nemluxury_dev}"
+    ports:
+      - "${NEMPAY_API_PORT:-8080}:8080"
+
+  # The notification-plane + sweeps worker: delivers webhooks out-of-band (asynq over Redis),
+  # runs the settle/expiry/idempotency sweeps. Separate process from the api on purpose.
+  worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DB_URL: "postgres://nempay:nempay@postgres:5432/nempay?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      BANKSIM_URL: "http://bank-sim:9090"
+
+  bank-sim:
+    build: ./bank-sim
+    environment:
+      PORT: "9090"
+    ports:
+      - "${NEMPAY_BANKSIM_PORT:-9090}:9090"
+
+volumes:
+  pgdata:
