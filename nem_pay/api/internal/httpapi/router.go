@@ -52,6 +52,7 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	pi.POST("/:id/confirm", WithIdempotency(q, intents.confirm))
 	pi.POST("/:id/capture", WithIdempotency(q, intents.capture))
 	pi.POST("/:id/refund", WithIdempotency(q, intents.refund))
+	pi.POST("/:id/release", WithIdempotency(q, intents.release)) // escrow only
 
 	return r
 }

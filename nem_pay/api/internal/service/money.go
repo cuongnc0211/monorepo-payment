@@ -30,6 +30,8 @@ func eventTypeFor(status string) string {
 		return "payment_intent.settled"
 	case statemachine.StatusHeldInEscrow:
 		return "payment_intent.held_in_escrow"
+	case statemachine.StatusReleased:
+		return "escrow.released"
 	case statemachine.StatusRefunded:
 		return "payment_intent.refunded"
 	case statemachine.StatusPartiallyRefunded:
@@ -217,6 +219,13 @@ func (s *Intents) Refund(ctx context.Context, id, merchantID uuid.UUID, amount i
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}
+	// An escrow refund posts to different accounts (escrow_liability / segregated_cash) and is
+	// implemented separately. The direct-mode postings below MUST NOT run for an escrow intent —
+	// they would touch merchant_payable/acquirer_receivable and strand the held funds while the
+	// intent falsely reports refunded. Reject escrow here until the escrow refund path exists.
+	if pi.SettlementMode == statemachine.SettlementEscrow {
+		return db.PaymentIntent{}, ErrInvalidState
+	}
 	if amount > pi.Amount {
 		return db.PaymentIntent{}, ErrRefundExceedsCapture
 	}
@@ -256,6 +265,89 @@ func (s *Intents) Refund(ctx context.Context, id, merchantID uuid.UUID, amount i
 	}
 
 	updated, err := qtx.UpdateIntentStatus(dbCtx, db.UpdateIntentStatusParams{ID: pi.ID, Status: next})
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+	if err := emit(dbCtx, qtx, updated); err != nil {
+		return db.PaymentIntent{}, err
+	}
+	if err := tx.Commit(dbCtx); err != nil {
+		return db.PaymentIntent{}, err
+	}
+	return updated, nil
+}
+
+// Release discharges a held escrow intent to its payee minus the flat application fee, as one
+// balanced transaction (Option A — all cash leaves segregation): the escrow liability is
+// discharged, the cash moves from segregated into platform_cash, the payee accrues (amount − fee),
+// and the fee becomes platform revenue. The intent becomes `released` (terminal). Idempotent +
+// FOR UPDATE: a retry replays and a concurrent double-release is rejected. No bank call — the
+// payout to the payee is deferred (the payable simply stands, like merchant_payable in direct mode).
+func (s *Intents) Release(ctx context.Context, id, merchantID uuid.UUID) (db.PaymentIntent, error) {
+	dbCtx := context.WithoutCancel(ctx)
+	tx, err := s.pool.Begin(dbCtx)
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+	defer tx.Rollback(dbCtx) //nolint:errcheck
+	qtx := s.q.WithTx(tx)
+
+	pi, err := s.lock(dbCtx, qtx, id, merchantID)
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+	// Only an escrow intent in held_in_escrow may be released; this rejects direct intents,
+	// not-yet-held escrow intents, and a second release of an already-released one.
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusReleased) || pi.PayeeID == nil {
+		return db.PaymentIntent{}, ErrInvalidState
+	}
+
+	fee := int64(0)
+	if pi.ApplicationFee != nil {
+		fee = *pi.ApplicationFee
+	}
+	payeeAmount := pi.Amount - fee
+
+	escrowLiab, err := s.perRefAccount(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindEscrowLiability, pi.Currency, pi.ID)
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+	segCash, err := s.account(dbCtx, qtx, merchantID, ledger.TypeAsset, ledger.KindSegregatedCash, pi.Currency)
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+	platformCash, err := s.account(dbCtx, qtx, merchantID, ledger.TypeAsset, ledger.KindPlatformCash, pi.Currency)
+	if err != nil {
+		return db.PaymentIntent{}, err
+	}
+
+	// Balanced regardless of fee: Dr(escrow_liability + platform_cash) = 2A ;
+	// Cr(segregated_cash A + payable (A−fee) + revenue fee) = 2A. Zero-value legs are omitted, since
+	// the ledger rejects an entry with both sides zero (fee==0 → no revenue; fee==amount → no payable).
+	entries := []ledger.Entry{
+		{AccountID: escrowLiab, Debit: pi.Amount, Currency: pi.Currency},
+		{AccountID: platformCash, Debit: pi.Amount, Currency: pi.Currency},
+		{AccountID: segCash, Credit: pi.Amount, Currency: pi.Currency},
+	}
+	if payeeAmount > 0 {
+		payable, aerr := s.perRefAccount(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindPayableToPayee, pi.Currency, *pi.PayeeID)
+		if aerr != nil {
+			return db.PaymentIntent{}, aerr
+		}
+		entries = append(entries, ledger.Entry{AccountID: payable, Credit: payeeAmount, Currency: pi.Currency})
+	}
+	if fee > 0 {
+		rev, aerr := s.account(dbCtx, qtx, merchantID, ledger.TypeRevenue, ledger.KindPlatformRevenue, pi.Currency)
+		if aerr != nil {
+			return db.PaymentIntent{}, aerr
+		}
+		entries = append(entries, ledger.Entry{AccountID: rev, Credit: fee, Currency: pi.Currency})
+	}
+	if _, err := ledger.PostTransaction(dbCtx, qtx, merchantID, "release", &pi.ID, entries); err != nil {
+		return db.PaymentIntent{}, err
+	}
+
+	updated, err := qtx.UpdateIntentStatus(dbCtx, db.UpdateIntentStatusParams{ID: pi.ID, Status: statemachine.StatusReleased})
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}

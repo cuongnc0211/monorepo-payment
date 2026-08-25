@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -139,6 +140,164 @@ func TestEscrow_SettleIntoSegregation(t *testing.T) {
 	_ = pool.QueryRow(ctx, "SELECT count(*) FROM outbox WHERE event_type='payment_intent.held_in_escrow'").Scan(&n2)
 	if n2 != 1 {
 		t.Fatalf("want 1 held_in_escrow event, got %d", n2)
+	}
+}
+
+// heldEscrow drives an escrow intent all the way to held_in_escrow.
+func heldEscrow(t *testing.T, s *Intents, q *db.Queries, merchant, payee uuid.UUID, amt, fee int64) db.PaymentIntent {
+	t.Helper()
+	ctx := context.Background()
+	pi := mkEscrowIntent(t, q, merchant, payee, amt, fee)
+	mustConfirmCapture(t, s, pi.ID, merchant)
+	if _, err := s.SettleDueIntents(ctx, 0); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	got, _ := s.Get(ctx, pi.ID, merchant)
+	if got.Status != statemachine.StatusHeldInEscrow {
+		t.Fatalf("setup: want held_in_escrow, got %s", got.Status)
+	}
+	return got
+}
+
+func TestEscrow_Release(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	const amt, fee = 250000, 5000
+	payee := uuid.New()
+	pi := heldEscrow(t, s, q, merchant, payee, amt, fee)
+
+	got, err := s.Release(ctx, pi.ID, merchant)
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if got.Status != statemachine.StatusReleased {
+		t.Fatalf("want released, got %s", got.Status)
+	}
+	// escrow_liability=0, segregated_cash=0, platform_cash=+amt, payee=-(amt-fee), revenue=-fee.
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != 0 {
+		t.Fatalf("escrow_liability after release want 0, got %d", b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != 0 {
+		t.Fatalf("segregated_cash after release want 0, got %d", b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindPlatformCash); b != amt {
+		t.Fatalf("platform_cash after release want %d, got %d", amt, b)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindPayableToPayee, payee); b != -(amt - fee) {
+		t.Fatalf("payable_to_payee want %d, got %d", -(amt - fee), b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeRevenue, ledger.KindPlatformRevenue); b != -fee {
+		t.Fatalf("platform_revenue want %d, got %d", -fee, b)
+	}
+}
+
+func TestEscrow_ReleaseFeeEdges(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+
+	// fee == amount → payee accrues 0, all becomes revenue.
+	p1 := uuid.New()
+	pi1 := heldEscrow(t, s, q, merchant, p1, 1000, 1000)
+	if _, err := s.Release(ctx, pi1.ID, merchant); err != nil {
+		t.Fatalf("release fee==amount: %v", err)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindPayableToPayee, p1); b != 0 {
+		t.Fatalf("payee should accrue 0 when fee==amount, got %d", b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeRevenue, ledger.KindPlatformRevenue); b != -1000 {
+		t.Fatalf("revenue want -1000, got %d", b)
+	}
+
+	// fee == 0 → no revenue, payee gets all.
+	p2 := uuid.New()
+	pi2 := heldEscrow(t, s, q, merchant, p2, 1000, 0)
+	if _, err := s.Release(ctx, pi2.ID, merchant); err != nil {
+		t.Fatalf("release fee==0: %v", err)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindPayableToPayee, p2); b != -1000 {
+		t.Fatalf("payee want -1000 when fee==0, got %d", b)
+	}
+}
+
+func TestEscrow_ReleaseIdempotentAndConcurrent(t *testing.T) {
+	s, q, pool, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	payee := uuid.New()
+	pi := heldEscrow(t, s, q, merchant, payee, 5000, 500)
+
+	const N = 6
+	var wg sync.WaitGroup
+	var ok int64
+	var mu sync.Mutex
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := s.Release(ctx, pi.ID, merchant); err == nil {
+				mu.Lock()
+				ok++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if ok != 1 {
+		t.Fatalf("want exactly 1 successful release, got %d", ok)
+	}
+	var nRel int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM transactions WHERE kind='release'").Scan(&nRel); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if nRel != 1 {
+		t.Fatalf("want 1 release ledger tx, got %d", nRel)
+	}
+	// A further release of the already-released intent is rejected.
+	if _, err := s.Release(ctx, pi.ID, merchant); err != ErrInvalidState {
+		t.Fatalf("re-release want ErrInvalidState, got %v", err)
+	}
+}
+
+func TestEscrow_ReleaseNonHeldRejected(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+
+	// Escrow intent only captured (not settled) → cannot release.
+	payee := uuid.New()
+	pi := mkEscrowIntent(t, q, merchant, payee, 1000, 100)
+	mustConfirmCapture(t, s, pi.ID, merchant)
+	if _, err := s.Release(ctx, pi.ID, merchant); err != ErrInvalidState {
+		t.Fatalf("release captured (not held) want ErrInvalidState, got %v", err)
+	}
+
+	// Direct intent cannot be released.
+	d := mkIntent(t, q, merchant, 1000)
+	mustConfirmCapture(t, s, d.ID, merchant)
+	if _, err := s.Release(ctx, d.ID, merchant); err != ErrInvalidState {
+		t.Fatalf("release direct intent want ErrInvalidState, got %v", err)
+	}
+}
+
+// The direct-mode refund path must NOT touch an escrow intent (it would post to the wrong
+// accounts and strand the held funds). The escrow refund is a separate path; until then /refund on
+// a held escrow intent is rejected and the held funds are untouched. (Replaced when escrow refund lands.)
+func TestEscrow_DirectRefundPathRejectsEscrow(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	payee := uuid.New()
+	pi := heldEscrow(t, s, q, merchant, payee, 1000, 100)
+
+	if _, err := s.Refund(ctx, pi.ID, merchant, 1000); err != ErrInvalidState {
+		t.Fatalf("escrow refund via direct path want ErrInvalidState, got %v", err)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != -1000 {
+		t.Fatalf("held escrow_liability must be untouched, got %d", b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != 1000 {
+		t.Fatalf("segregated_cash must be untouched, got %d", b)
+	}
+	got, _ := s.Get(ctx, pi.ID, merchant)
+	if got.Status != statemachine.StatusHeldInEscrow {
+		t.Fatalf("intent must stay held_in_escrow, got %s", got.Status)
 	}
 }
 

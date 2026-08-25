@@ -213,6 +213,18 @@ func (h *intentHandler) capture(c *gin.Context) {
 	c.JSON(http.StatusOK, toIntentResponse(pi))
 }
 
+func (h *intentHandler) release(c *gin.Context) {
+	merchantID, id, ok := h.authAndID(c)
+	if !ok {
+		return
+	}
+	pi, err := h.svc.Release(c.Request.Context(), id, merchantID)
+	if mapMoneyError(c, err) {
+		return
+	}
+	c.JSON(http.StatusOK, toIntentResponse(pi))
+}
+
 func (h *intentHandler) refund(c *gin.Context) {
 	merchantID, id, ok := h.authAndID(c)
 	if !ok {

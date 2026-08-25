@@ -126,7 +126,7 @@ new tables (`payee_id` / `application_fee` already exist), and **bank-sim is unc
 - [x] [task-01 — Migration + mode-aware state machine + account kinds](./task-01-schema-statemachine-accounts.md)
 - [x] [task-02 — Create escrow intent + mode-aware capture](./task-02-create-escrow-and-capture.md)
 - [x] [task-03 — Settle into segregation (held_in_escrow)](./task-03-settle-into-escrow.md)
-- [ ] [task-04 — Release to payee minus fee](./task-04-release.md)
+- [x] [task-04 — Release to payee minus fee](./task-04-release.md)
 - [ ] [task-05 — Full refund from escrow](./task-05-refund-from-escrow.md)
 - [ ] [task-06 — Segregation reconciliation + constitution refinement](./task-06-segregation-reconciliation.md)
 - [ ] [task-07 — Lifecycle tests + direct regression + e2e](./task-07-tests-and-e2e.md)
