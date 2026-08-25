@@ -131,15 +131,20 @@ third-party payee until the platform (NemTasker) explicitly releases it. Held mo
 - *Releasing it.* Release is an **explicit, idempotent** call — `POST
   /v1/payment_intents/:id/release` — made by the platform only after the job is confirmed
   done. NemPay never auto-releases on a timer yet (that is a later lesson).
-- *The ledger (the core of the lesson):*
-  - Capture → `Dr platform-cash`, `Cr escrow-liability(intent)`.
-  - Release → `Dr escrow-liability`, `Cr payable-to-payee`, `Cr platform-revenue(fee)`.
-  - Refund  → `Dr escrow-liability`, `Cr refund-to-payer`.
+- *The ledger (the core of the lesson) — funds are held in a SEGREGATED account, never
+  commingled with `platform-cash`. Capture pulls the money to a receivable; a settle step then
+  lands it into segregation (mirroring direct capture→settle, destination decided by mode):*
+  - Capture → `Dr acquirer-receivable`, `Cr escrow-liability(intent)` → `captured`.
+  - Settle  → `Dr segregated-cash`, `Cr acquirer-receivable` → `held_in_escrow`.
+  - Release → `Dr escrow-liability` + `Dr platform-cash`, `Cr segregated-cash` +
+    `Cr payable-to-payee(amount−fee)` + `Cr platform-revenue(fee)` → `released`.
+  - Refund (from held) → `Dr escrow-liability`, `Cr segregated-cash` → `refunded`.
   - Each is one balanced transaction written **inside the same DB tx** as the state change.
-- *The invariant that must always hold:* the total balance of all `escrow-liability`
-  accounts MUST equal the balance of the segregated bank account (the money NemPay is
-  holding for others). Reconciliation proves this continuously — it is a compliance
-  requirement, not a nicety. If the two ever diverge, that is a P0.
+- *The invariant that must always hold:* the segregated-cash on hand MUST equal the total
+  `escrow-liability` for funds currently `held_in_escrow`. Reconciliation proves this
+  continuously — a compliance requirement, not a nicety; if the two ever diverge, that is a P0. (A
+  captured-not-yet-settled liability is instead backed by the acquirer receivable during the brief
+  transit window before settlement.)
 
 **Scope for now (core lifecycle first).** Implement exactly: capture-into-escrow, explicit
 release (with a single flat `application_fee`), and full refund from escrow — each proven

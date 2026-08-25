@@ -142,3 +142,26 @@ func (q *Queries) ListAccounts(ctx context.Context, merchantID uuid.UUID) ([]Acc
 	}
 	return items, nil
 }
+
+const sumAccountBalanceByKind = `-- name: SumAccountBalanceByKind :one
+SELECT (COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0))::numeric AS balance
+FROM entries e
+JOIN accounts a ON e.account_id = a.id
+WHERE a.merchant_id = $1 AND a.kind = $2 AND a.currency = $3
+`
+
+type SumAccountBalanceByKindParams struct {
+	MerchantID uuid.UUID `json:"merchant_id"`
+	Kind       string    `json:"kind"`
+	Currency   string    `json:"currency"`
+}
+
+// Sum the derived balance across ALL of a merchant's accounts of one kind (e.g. every per-intent
+// escrow_liability). Computed in numeric (exact). Used by escrow reconciliation to prove the
+// segregation invariant: segregated_cash == −Σ escrow_liability (held funds are fully backed).
+func (q *Queries) SumAccountBalanceByKind(ctx context.Context, arg SumAccountBalanceByKindParams) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, sumAccountBalanceByKind, arg.MerchantID, arg.Kind, arg.Currency)
+	var balance pgtype.Numeric
+	err := row.Scan(&balance)
+	return balance, err
+}

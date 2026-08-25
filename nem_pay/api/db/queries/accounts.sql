@@ -33,3 +33,12 @@ WHERE account_id = $1;
 SELECT * FROM accounts
 WHERE merchant_id = $1
 ORDER BY created_at;
+
+-- name: SumAccountBalanceByKind :one
+-- Sum the derived balance across ALL of a merchant's accounts of one kind (e.g. every per-intent
+-- escrow_liability). Computed in numeric (exact). Used by escrow reconciliation to prove the
+-- segregation invariant: segregated_cash == −Σ escrow_liability (held funds are fully backed).
+SELECT (COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0))::numeric AS balance
+FROM entries e
+JOIN accounts a ON e.account_id = a.id
+WHERE a.merchant_id = $1 AND a.kind = $2 AND a.currency = $3;

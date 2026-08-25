@@ -329,4 +329,50 @@ func TestEscrow_RefundAfterReleaseRejected(t *testing.T) {
 	}
 }
 
+// The segregation invariant holds after every step across a mix of held / released / refunded
+// intents: the segregated cash on hand always backs exactly the outstanding escrow liabilities,
+// and fees appear in platform_revenue only after a release.
+func TestEscrow_SegregationInvariant(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+
+	assertHolds := func(step string, wantSegregated int64) {
+		t.Helper()
+		seg, liab, ok, err := ledger.EscrowSegregationHolds(ctx, q, merchant, "USD")
+		if err != nil {
+			t.Fatalf("%s: reconcile: %v", step, err)
+		}
+		if !ok {
+			t.Fatalf("%s: invariant broken: segregated=%d + liability=%d != 0", step, seg, liab)
+		}
+		if seg != wantSegregated {
+			t.Fatalf("%s: segregated want %d, got %d", step, wantSegregated, seg)
+		}
+	}
+
+	p1, p2, p3 := uuid.New(), uuid.New(), uuid.New()
+	h1 := heldEscrow(t, s, q, merchant, p1, 1000, 100)
+	assertHolds("held #1", 1000)
+	h2 := heldEscrow(t, s, q, merchant, p2, 2000, 0)
+	assertHolds("held #2", 3000)
+	h3 := heldEscrow(t, s, q, merchant, p3, 3000, 300)
+	assertHolds("held #3", 6000)
+
+	if _, err := s.Release(ctx, h1.ID, merchant); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	assertHolds("after release #1", 5000) // #1 (1000) left escrow
+
+	if _, err := s.Refund(ctx, h2.ID, merchant, 2000); err != nil {
+		t.Fatalf("refund: %v", err)
+	}
+	assertHolds("after refund #2", 3000) // only #3 (3000) still held
+	_ = h3
+
+	// Fees show up only after release: #1's fee of 100, and nothing from the refund.
+	if b := bal(t, q, merchant, ledger.TypeRevenue, ledger.KindPlatformRevenue); b != -100 {
+		t.Fatalf("platform_revenue want -100 (only the released fee), got %d", b)
+	}
+}
+
 func ptr64(v int64) *int64 { return &v }

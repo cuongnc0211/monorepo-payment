@@ -128,7 +128,7 @@ new tables (`payee_id` / `application_fee` already exist), and **bank-sim is unc
 - [x] [task-03 — Settle into segregation (held_in_escrow)](./task-03-settle-into-escrow.md)
 - [x] [task-04 — Release to payee minus fee](./task-04-release.md)
 - [x] [task-05 — Full refund from escrow](./task-05-refund-from-escrow.md)
-- [ ] [task-06 — Segregation reconciliation + constitution refinement](./task-06-segregation-reconciliation.md)
+- [x] [task-06 — Segregation reconciliation + constitution refinement](./task-06-segregation-reconciliation.md)
 - [ ] [task-07 — Lifecycle tests + direct regression + e2e](./task-07-tests-and-e2e.md)
 
 **Dependency order:** 01 → 02 → 03 → {04, 05} → 06 → 07. Tasks 04 (release) and 05 (refund) both
