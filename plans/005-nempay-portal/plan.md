@@ -1,6 +1,6 @@
 # Plan — NemPay portal (merchant dashboard, read-only, multi-tenant)
 
-**ID:** 005-nempay-portal · **Status:** draft
+**ID:** 005-nempay-portal · **Status:** done
 **Spec:** ../../specs/005-nempay-portal/spec.md
 **Constitution:** ../../CLAUDE.md (+ nem_pay/CLAUDE.md → "portal/ — React merchant dashboard")
 
@@ -95,12 +95,12 @@ compose service is deferred. CORS on the api must allow the portal origin.
   and read endpoints, delete `nem_pay/portal/`. The gateway still runs standalone.
 
 ## Tasks (execute in order)
-- [ ] [task-01 — portal users table + multi-merchant seed](./task-01-users-and-seed.md)
-- [ ] [task-02 — JWT session login + key-or-session auth](./task-02-jwt-session-auth.md)
-- [ ] [task-03 — tenant-scoped read endpoints (+ OpenAPI, CORS)](./task-03-read-endpoints.md)
-- [ ] [task-04 — multi-tenant isolation & auth test suite](./task-04-isolation-tests.md)
-- [ ] [task-05 — portal scaffold: SPA, generated client, login + guard](./task-05-portal-scaffold-auth.md)
-- [ ] [task-06 — portal pages: payments, ledger, balances, webhooks, keys](./task-06-portal-pages.md)
+- [x] [task-01 — portal users table + multi-merchant seed](./task-01-users-and-seed.md)
+- [x] [task-02 — JWT session login + key-or-session auth](./task-02-jwt-session-auth.md)
+- [x] [task-03 — tenant-scoped read endpoints (+ OpenAPI, CORS)](./task-03-read-endpoints.md)
+- [x] [task-04 — multi-tenant isolation & auth test suite](./task-04-isolation-tests.md)
+- [x] [task-05 — portal scaffold: SPA, generated client, login + guard](./task-05-portal-scaffold-auth.md)
+- [x] [task-06 — portal pages: payments, ledger, balances, webhooks, keys](./task-06-portal-pages.md)
 
 **Order / dependencies:** 01 → 02 → 03 → 04 (04 verifies 02+03). Frontend: 05 depends on 02+03,
 06 depends on 05. Backend (01–04) and the portal scaffold (05) can proceed in parallel once 03's
