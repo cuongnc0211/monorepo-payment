@@ -17,6 +17,10 @@ class Order < ApplicationRecord
   validates :currency, presence: true, length: { is: 3 }
   validates :checkout_token, presence: true, uniqueness: true
 
+  # Contact details are required only when submitted through the checkout form (context :checkout),
+  # so internal order creation and existing flows are unaffected.
+  validates :customer_name, :customer_address, :customer_phone, presence: true, on: :checkout
+
   # Move the order to `paid`. Only legal from `pending_payment`; idempotent if already `paid`
   # (at-least-once webhook delivery means this may be called more than once). Any other source
   # state is a bug and raises.

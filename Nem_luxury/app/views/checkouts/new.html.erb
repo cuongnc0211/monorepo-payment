@@ -1,0 +1,55 @@
+<% content_for :title, "Checkout — #{@product.name}" %>
+
+<section class="wrap checkout">
+  <%= link_to product_path(@product), class: "back-link" do %>
+    <%= icon("arrow-left", size: 16) %> Back to <%= @product.name %>
+  <% end %>
+
+  <nav class="steps" aria-label="Checkout steps">
+    <span class="steps__item steps__item--active"><span class="steps__num">1</span> Details</span>
+    <span class="steps__bar"></span>
+    <span class="steps__item"><span class="steps__num">2</span> Payment</span>
+  </nav>
+
+  <div class="summary">
+    <div class="summary__thumb"><%= product_image_tag(@product, width: 180) %></div>
+    <div>
+      <span class="summary__cat"><%= product_category(@product) %></span>
+      <div class="summary__name"><%= @product.name %></div>
+    </div>
+    <span class="summary__price"><%= format_money(@product.amount_cents, @product.currency) %></span>
+  </div>
+
+  <div class="panel">
+    <h2 class="panel__title">Your details</h2>
+
+    <% if @order&.errors&.any? %>
+      <div class="form-errors" role="alert">
+        Please complete the required details:
+        <ul><% @order.errors.full_messages.each do |m| %><li><%= m %></li><% end %></ul>
+      </div>
+    <% end %>
+
+    <%= form_with url: checkout_path, method: :post do %>
+      <%= hidden_field_tag :product_id, @product.id %>
+      <%= hidden_field_tag :checkout_token, @checkout_token %>
+
+      <div class="field">
+        <%= label_tag :customer_name, "Full name", class: "field__label" %>
+        <%= text_field_tag :customer_name, @order&.customer_name, autocomplete: "name", placeholder: "Ada Lovelace" %>
+      </div>
+      <div class="field">
+        <%= label_tag :customer_address, "Delivery address", class: "field__label" %>
+        <%= text_area_tag :customer_address, @order&.customer_address, autocomplete: "street-address", placeholder: "1 Maison Avenue, Monaco" %>
+      </div>
+      <div class="field">
+        <%= label_tag :customer_phone, "Phone", class: "field__label" %>
+        <%= telephone_field_tag :customer_phone, @order&.customer_phone, autocomplete: "tel", placeholder: "+377 00 00 00 00" %>
+      </div>
+
+      <button type="submit" class="btn btn-gold">
+        Continue to payment <%= icon("arrow-right", size: 16) %>
+      </button>
+    <% end %>
+  </div>
+</section>

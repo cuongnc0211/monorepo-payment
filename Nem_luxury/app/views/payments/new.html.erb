@@ -1,0 +1,133 @@
+<% content_for :title, "Payment — #{@order.product.name}" %>
+
+<section class="wrap checkout">
+  <%= link_to new_checkout_path(@order.product), class: "back-link" do %>
+    <%= icon("arrow-left", size: 16) %> Back to details
+  <% end %>
+
+  <nav class="steps" aria-label="Checkout steps">
+    <span class="steps__item"><span class="steps__num">1</span> Details</span>
+    <span class="steps__bar"></span>
+    <span class="steps__item steps__item--active"><span class="steps__num">2</span> Payment</span>
+  </nav>
+
+  <div class="summary">
+    <div class="summary__thumb"><%= product_image_tag(@order.product, width: 180) %></div>
+    <div>
+      <span class="summary__cat"><%= product_category(@order.product) %></span>
+      <div class="summary__name"><%= @order.product.name %></div>
+    </div>
+    <span class="summary__price"><%= format_money(@order.amount_cents, @order.currency) %></span>
+  </div>
+
+  <div class="panel">
+    <h2 class="panel__title">Payment</h2>
+
+    <%# Card fields have NO `name`, so they are never serialized to NemLuxury. On submit, JS tokenizes
+        them directly against NemPay and posts only the returned token (the hidden field below). %>
+    <%= form_with url: pay_order_path(@order), method: :post, id: "pay-form",
+                  data: { tokens_url: "#{NemPay.js_url}/v1/tokens", pk: NemPay.publishable_key } do %>
+      <%= hidden_field_tag :token, "", id: "token-field" %>
+
+      <div class="card-form">
+        <div class="field">
+          <label class="field__label" for="cc-number">Card information</label>
+          <div class="card-box">
+            <div class="card-box__num">
+              <input id="cc-number" inputmode="numeric" autocomplete="cc-number"
+                     placeholder="1234 1234 1234 1234" aria-label="Card number">
+            </div>
+            <div class="card-box__row card-box__row--split">
+              <input id="cc-exp" inputmode="numeric" autocomplete="cc-exp"
+                     placeholder="MM / YY" aria-label="Expiry (MM / YY)">
+              <input id="cc-cvc" inputmode="numeric" autocomplete="cc-csc"
+                     placeholder="CVC" aria-label="Security code">
+            </div>
+          </div>
+          <p class="pay-error" id="pay-error" role="alert"></p>
+        </div>
+
+        <button type="submit" class="btn btn-gold" id="pay-btn">
+          Pay <%= format_money(@order.amount_cents, @order.currency) %>
+        </button>
+      </div>
+    <% end %>
+
+    <div class="testcards" aria-label="Test cards">
+      <p class="testcards__title">Test cards — click to fill</p>
+      <table>
+        <tbody>
+          <tr><td><button type="button" data-fill="4242424242424242">4242 4242 4242 4242</button></td><td>Payment succeeds</td></tr>
+          <tr><td><button type="button" data-fill="4000000000000002">4000 0000 0000 0002</button></td><td>Card declined</td></tr>
+          <tr><td><button type="button" data-fill="4000000000000069">4000 0000 0000 0069</button></td><td>Bank timeout</td></tr>
+        </tbody>
+      </table>
+      <p class="testcards__hint">Use any future expiry (e.g. 12 / 30) and any 3-digit CVC. No real card is charged.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var form = document.getElementById("pay-form");
+    var btn = document.getElementById("pay-btn");
+    var errEl = document.getElementById("pay-error");
+    var tokenField = document.getElementById("token-field");
+    var numEl = document.getElementById("cc-number");
+    var expEl = document.getElementById("cc-exp");
+    var cvcEl = document.getElementById("cc-cvc");
+
+    // Fill helpers for the test cards.
+    document.querySelectorAll(".testcards button[data-fill]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        numEl.value = b.getAttribute("data-fill").replace(/(.{4})/g, "$1 ").trim();
+        expEl.value = "12 / 30";
+        cvcEl.value = "123";
+        numEl.focus();
+      });
+    });
+
+    function showError(msg) {
+      errEl.textContent = msg;
+      errEl.classList.add("pay-error--show");
+    }
+
+    form.addEventListener("submit", function (e) {
+      if (tokenField.value) return; // already tokenized — let the native POST through
+      e.preventDefault();
+      errEl.classList.remove("pay-error--show");
+      errEl.textContent = "";
+
+      var number = numEl.value.replace(/\s+/g, "");
+      var parts = expEl.value.split(/[\/\-\s]+/).filter(Boolean);
+      var expMonth = parseInt(parts[0], 10);
+      var expYear = parseInt(parts[1], 10);
+      if (expYear < 100) expYear += 2000;
+      var cvc = cvcEl.value.trim();
+
+      var original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Processing…";
+
+      // Tokenize directly against NemPay — the PAN goes to the gateway, never to NemLuxury.
+      fetch(form.dataset.tokensUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + form.dataset.pk },
+        body: JSON.stringify({ number: number, exp_month: expMonth, exp_year: expYear, cvc: cvc })
+      })
+        .then(function (res) { return res.json().then(function (b) { return { ok: res.ok, body: b }; }); })
+        .then(function (r) {
+          if (!r.ok) {
+            throw new Error((r.body && r.body.error && r.body.error.message) || "Your card could not be processed.");
+          }
+          tokenField.value = r.body.id;    // opaque token — the only card reference NemLuxury sees
+          form.submit();                   // native submit posts just the token (+ CSRF)
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          btn.textContent = original;
+          showError(err.message || "Could not reach the payment gateway.");
+        });
+    });
+  })();
+</script>

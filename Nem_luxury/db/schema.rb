@@ -10,12 +10,15 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_042012) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_26_000001) do
   create_table "orders", force: :cascade do |t|
     t.integer "amount_cents", null: false
     t.string "checkout_token", null: false
     t.datetime "created_at", null: false
     t.string "currency", limit: 3, null: false
+    t.string "customer_address"
+    t.string "customer_name"
+    t.string "customer_phone"
     t.string "nem_pay_intent_id"
     t.integer "product_id", null: false
     t.integer "status", default: 0, null: false

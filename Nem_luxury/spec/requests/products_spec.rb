@@ -10,17 +10,15 @@ RSpec.describe "Products", type: :request do
     expect(response.body).to include("2,500,000.00 USD") # integer-cents formatting, no floats
   end
 
-  describe "the buy form (AC7 — PCI boundary)" do
+  describe "the product page (AC7 — PCI boundary)" do
     before { get product_path(product) }
 
-    it "renders a checkout token and a test-payment-method selector" do
+    it "opens the multi-step checkout via an Acquire link, not an inline payment form" do
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include("checkout_token")
-      expect(response.body).to include("tok_ok")
-      expect(response.body).to include("tok_declined")
+      expect(response.body).to include(new_checkout_path(product))
     end
 
-    it "has no card-number input anywhere" do
+    it "has no card-number input on the product page" do
       expect(response.body).not_to match(/card.?number/i)
       expect(response.body).not_to match(/name=["'](pan|card|cc_number|cardnumber)/i)
     end

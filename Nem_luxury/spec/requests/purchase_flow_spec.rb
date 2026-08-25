@@ -1,7 +1,8 @@
 require 'rails_helper'
 
-# Ties both halves together deterministically (NemPay stubbed): checkout drives the payment but
-# leaves the order pending; the order becomes paid ONLY when the verified captured webhook arrives.
+# Ties both halves together deterministically (NemPay stubbed): the two-step checkout drives the
+# payment but leaves the order pending; it becomes paid ONLY when the verified captured webhook
+# arrives.
 RSpec.describe "Purchase flow", type: :request do
   let!(:product) { Product.create!(name: "Aurora GT", amount_cents: 2_500_000_00, currency: "USD") }
   let(:base) { "http://localhost:8080" }
@@ -20,8 +21,13 @@ RSpec.describe "Purchase flow", type: :request do
                  headers: { "Content-Type" => "application/json" })
   end
 
+  # Contact step then payment step, exactly as the browser drives them.
   def buy
-    post checkout_path, params: { product_id: product.id, checkout_token: token, payment_method: "tok_ok" }
+    post checkout_path, params: { product_id: product.id, checkout_token: token,
+                                  customer_name: "Ada", customer_address: "1 Maison Ave", customer_phone: "+377 1" }
+    order = Order.find_by!(checkout_token: token)
+    post pay_order_path(order), params: { token: "tok_ok" }
+    order
   end
 
   def captured_body
@@ -29,20 +35,16 @@ RSpec.describe "Purchase flow", type: :request do
                   amount: product.amount_cents, currency: "USD")
   end
 
-  it "checkout leaves the order pending; the captured webhook then marks it paid (AC1, AC3)" do
-    buy
-    order = Order.find_by!(checkout_token: token)
-    expect(order).to be_pending_payment # not paid from the synchronous capture response
+  it "checkout leaves the order pending; the captured webhook then marks it paid" do
+    order = buy
+    expect(order.reload).to be_pending_payment # not paid from the synchronous capture response
 
     expect { deliver_webhook(body: captured_body, event_type: "payment_intent.captured") }
       .to change { order.reload.status }.from("pending_payment").to("paid")
   end
 
-  it "without the webhook, the order stays pending (AC3 — never paid on redirect alone)" do
-    buy
-    order = Order.find_by!(checkout_token: token)
-    expect(order).to be_pending_payment
-    # No webhook delivered → still pending.
+  it "without the webhook, the order stays pending (never paid on redirect alone)" do
+    order = buy
     expect(order.reload).to be_pending_payment
   end
 end

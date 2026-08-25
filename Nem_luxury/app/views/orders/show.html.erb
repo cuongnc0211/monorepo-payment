@@ -49,6 +49,20 @@
         Thank you. Your acquisition is confirmed and our concierge will be in touch to arrange
         delivery.
       </p>
+      <dl class="details">
+        <div class="details__row"><dt>Item</dt><dd><%= @order.product.name %></dd></div>
+        <div class="details__row"><dt>Amount</dt><dd><%= format_money(@order.amount_cents, @order.currency) %></dd></div>
+        <% if @order.customer_name.present? %>
+          <div class="details__row"><dt>Name</dt><dd><%= @order.customer_name %></dd></div>
+        <% end %>
+        <% if @order.customer_address.present? %>
+          <div class="details__row"><dt>Delivery</dt><dd><%= @order.customer_address %></dd></div>
+        <% end %>
+        <% if @order.customer_phone.present? %>
+          <div class="details__row"><dt>Phone</dt><dd><%= @order.customer_phone %></dd></div>
+        <% end %>
+        <div class="details__row"><dt>Order</dt><dd>#<%= @order.id %></dd></div>
+      </dl>
     <% else %>
       <span class="status status--other"><%= @order.status.humanize %></span>
     <% end %>

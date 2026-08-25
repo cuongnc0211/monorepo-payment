@@ -5,8 +5,7 @@ class ProductsController < ApplicationController
 
   def show
     @product = Product.find(params[:id])
-    # A fresh per-render checkout token: a double-submit of THIS buy form reuses this token, so
-    # it maps to a single order (and a single charge) downstream — see CheckoutsController.
-    @checkout_token = SecureRandom.uuid
+    # "Acquire now" now opens the multi-step checkout (contact → card); the checkout_token is minted
+    # on the contact form (CheckoutsController#new), not here.
   end
 end

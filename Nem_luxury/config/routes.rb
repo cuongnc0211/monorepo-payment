@@ -4,8 +4,13 @@ Rails.application.routes.draw do
   resources :products, only: %i[index show]
   resources :orders, only: %i[show]
 
-  # Checkout + inbound webhook are wired in task-03 / task-04.
-  post "/checkout", to: "checkouts#create", as: :checkout
+  # Multi-step checkout: contact details → create order + intent → card page → pay.
+  get  "/products/:product_id/checkout", to: "checkouts#new",    as: :new_checkout
+  post "/checkout",                      to: "checkouts#create", as: :checkout
+  get  "/orders/:id/payment",            to: "payments#new",     as: :order_payment
+  post "/orders/:id/payment",            to: "payments#create",  as: :pay_order
+
+  # Inbound webhook (task-04).
   post "/webhooks/nem_pay", to: "webhooks/nem_pay#create"
 
   # Rails health check.

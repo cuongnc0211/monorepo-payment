@@ -27,4 +27,17 @@ module NemPay
   def webhook_secret
     ENV.fetch("NEMPAY_WEBHOOK_SECRET")
   end
+
+  # Publishable key — safe to expose in the browser. Used by the card page to tokenize the card
+  # directly against NemPay (the PAN never touches this server). Defaults to the dev-seeded value.
+  def publishable_key
+    ENV.fetch("NEMPAY_PUBLISHABLE_KEY", "pk_test_nempay_publishable")
+  end
+
+  # Base URL the *browser* uses to reach NemPay for tokenization. Usually the same as api_url in
+  # local dev; kept separate because the server and the browser may resolve the gateway differently
+  # (e.g. a containerized app talks to host.docker.internal while the browser uses localhost).
+  def js_url
+    ENV.fetch("NEMPAY_JS_URL") { api_url }
+  end
 end
