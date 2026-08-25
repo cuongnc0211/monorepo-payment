@@ -19,6 +19,8 @@ var (
 	ErrInvalidAmount   = errors.New("amount must be a positive integer in minor units")
 	ErrInvalidCurrency = errors.New("currency must be a 3-letter ISO-4217 code")
 	ErrIntentNotFound  = errors.New("payment intent not found")
+	ErrPayeeRequired   = errors.New("an escrow intent requires a payee")
+	ErrInvalidFee      = errors.New("application_fee must be between 0 and the amount")
 )
 
 // defaultListLimit / maxListLimit bound the list endpoint's page size.
@@ -43,22 +45,53 @@ func NewIntents(pool *pgxpool.Pool, bank *banksim.Client) *Intents {
 
 // Create validates and inserts a new direct-mode intent in status 'created'. metadata may be
 // nil (stored as an empty JSON object).
-func (s *Intents) Create(ctx context.Context, merchantID uuid.UUID, amount int64, currency string, metadata []byte) (db.PaymentIntent, error) {
-	if amount <= 0 {
+// CreateInput is the intent-creation request. Escrow is true when the platform is brokering a
+// third-party payee; Payee and ApplicationFee are then required and immutable for the intent's life.
+type CreateInput struct {
+	Amount         int64
+	Currency       string
+	Metadata       []byte
+	Escrow         bool
+	Payee          *uuid.UUID
+	ApplicationFee *int64
+}
+
+func (s *Intents) Create(ctx context.Context, merchantID uuid.UUID, in CreateInput) (db.PaymentIntent, error) {
+	if in.Amount <= 0 {
 		return db.PaymentIntent{}, ErrInvalidAmount
 	}
-	currency, ok := normalizeCurrency(currency)
+	currency, ok := normalizeCurrency(in.Currency)
 	if !ok {
 		return db.PaymentIntent{}, ErrInvalidCurrency
 	}
+	metadata := in.Metadata
 	if len(metadata) == 0 {
 		metadata = []byte("{}")
 	}
+
+	// Direct by default; escrow requires a payee and a flat fee within [0, amount].
+	mode := statemachine.SettlementDirect
+	var payee *uuid.UUID
+	var fee *int64
+	if in.Escrow {
+		mode = statemachine.SettlementEscrow
+		if in.Payee == nil || *in.Payee == uuid.Nil {
+			return db.PaymentIntent{}, ErrPayeeRequired
+		}
+		if in.ApplicationFee == nil || *in.ApplicationFee < 0 || *in.ApplicationFee > in.Amount {
+			return db.PaymentIntent{}, ErrInvalidFee
+		}
+		payee = in.Payee
+		fee = in.ApplicationFee
+	}
+
 	return s.q.CreateIntent(ctx, db.CreateIntentParams{
 		MerchantID:     merchantID,
-		Amount:         amount,
+		Amount:         in.Amount,
 		Currency:       currency,
-		SettlementMode: statemachine.SettlementDirect,
+		SettlementMode: mode,
+		PayeeID:        payee,
+		ApplicationFee: fee,
 		Metadata:       metadata,
 	})
 }

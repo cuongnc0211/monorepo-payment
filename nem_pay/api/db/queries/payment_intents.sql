@@ -1,8 +1,8 @@
 -- name: CreateIntent :one
--- Create a payment intent in its initial 'created' state. settlement_mode is 'direct' for all
--- of M1; the column exists so M3 can pass 'escrow' without a schema change.
-INSERT INTO payment_intents (merchant_id, amount, currency, settlement_mode, metadata)
-VALUES ($1, $2, $3, $4, $5)
+-- Create a payment intent in its initial 'created' state. payee_id / application_fee are set only
+-- for escrow mode (NULL for direct).
+INSERT INTO payment_intents (merchant_id, amount, currency, settlement_mode, payee_id, application_fee, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetIntent :one

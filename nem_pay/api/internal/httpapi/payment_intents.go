@@ -24,6 +24,10 @@ type createIntentRequest struct {
 	Amount   int64           `json:"amount"`
 	Currency string          `json:"currency"`
 	Metadata json.RawMessage `json:"metadata"`
+	// Escrow mode (optional). When escrow is true, payee (a UUID) and application_fee are required.
+	Escrow         bool    `json:"escrow"`
+	Payee          string  `json:"payee"`
+	ApplicationFee *int64  `json:"application_fee"`
 }
 
 // intentResponse is the public shape of a payment intent — deliberately hand-mapped from the DB
@@ -35,6 +39,8 @@ type intentResponse struct {
 	Currency       string          `json:"currency"`
 	Status         string          `json:"status"`
 	SettlementMode string          `json:"settlement_mode"`
+	Payee          *string         `json:"payee,omitempty"`
+	ApplicationFee *int64          `json:"application_fee,omitempty"`
 	Metadata       json.RawMessage `json:"metadata"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
@@ -45,6 +51,11 @@ func toIntentResponse(pi db.PaymentIntent) intentResponse {
 	if len(meta) == 0 {
 		meta = []byte("{}")
 	}
+	var payee *string
+	if pi.PayeeID != nil {
+		s := pi.PayeeID.String()
+		payee = &s
+	}
 	return intentResponse{
 		ID:             pi.ID.String(),
 		Object:         "payment_intent",
@@ -52,6 +63,8 @@ func toIntentResponse(pi db.PaymentIntent) intentResponse {
 		Currency:       pi.Currency,
 		Status:         pi.Status,
 		SettlementMode: pi.SettlementMode,
+		Payee:          payee,
+		ApplicationFee: pi.ApplicationFee,
 		Metadata:       json.RawMessage(meta),
 		CreatedAt:      pi.CreatedAt.Time,
 		UpdatedAt:      pi.UpdatedAt.Time,
@@ -73,13 +86,34 @@ func (h *intentHandler) create(c *gin.Context) {
 		return
 	}
 
-	pi, err := h.svc.Create(c.Request.Context(), merchantID, req.Amount, req.Currency, req.Metadata)
+	in := service.CreateInput{
+		Amount:         req.Amount,
+		Currency:       req.Currency,
+		Metadata:       req.Metadata,
+		Escrow:         req.Escrow,
+		ApplicationFee: req.ApplicationFee,
+	}
+	if req.Escrow {
+		payee, perr := uuid.Parse(req.Payee)
+		if perr != nil {
+			respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "invalid_payee",
+				"payee must be a valid UUID for an escrow intent", "payee")
+			return
+		}
+		in.Payee = &payee
+	}
+
+	pi, err := h.svc.Create(c.Request.Context(), merchantID, in)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidAmount):
 			respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "invalid_amount", err.Error(), "amount")
 		case errors.Is(err, service.ErrInvalidCurrency):
 			respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "invalid_currency", err.Error(), "currency")
+		case errors.Is(err, service.ErrPayeeRequired):
+			respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "payee_required", err.Error(), "payee")
+		case errors.Is(err, service.ErrInvalidFee):
+			respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "invalid_application_fee", err.Error(), "application_fee")
 		default:
 			respondError(c, http.StatusInternalServerError, errTypeAPI, "create_failed",
 				"could not create the payment intent", "")

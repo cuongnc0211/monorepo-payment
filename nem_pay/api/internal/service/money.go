@@ -164,7 +164,14 @@ func (s *Intents) Capture(ctx context.Context, id, merchantID uuid.UUID) (db.Pay
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}
-	payable, err := s.account(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindMerchantPayable, pi.Currency)
+	// Credit destination decided by mode (escrow-adaptability guard #3): direct owes the merchant;
+	// escrow holds the amount as a per-intent liability to the payee (later settled into segregation).
+	var payable uuid.UUID
+	if pi.SettlementMode == statemachine.SettlementEscrow {
+		payable, err = s.perRefAccount(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindEscrowLiability, pi.Currency, pi.ID)
+	} else {
+		payable, err = s.account(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindMerchantPayable, pi.Currency)
+	}
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}
@@ -380,6 +387,15 @@ func (s *Intents) lock(ctx context.Context, qtx *db.Queries, id, merchantID uuid
 func (s *Intents) account(ctx context.Context, qtx *db.Queries, merchantID uuid.UUID, typ, kind, currency string) (uuid.UUID, error) {
 	a, err := qtx.GetOrCreateSingletonAccount(ctx, db.GetOrCreateSingletonAccountParams{
 		MerchantID: merchantID, Type: typ, Kind: kind, Currency: currency,
+	})
+	return a.ID, err
+}
+
+// perRefAccount get-or-creates a per-reference ledger account inside the tx — e.g. an
+// escrow_liability keyed by intent id, or a payable_to_payee keyed by payee id.
+func (s *Intents) perRefAccount(ctx context.Context, qtx *db.Queries, merchantID uuid.UUID, typ, kind, currency string, ref uuid.UUID) (uuid.UUID, error) {
+	a, err := qtx.GetOrCreatePerRefAccount(ctx, db.GetOrCreatePerRefAccountParams{
+		MerchantID: merchantID, Type: typ, Kind: kind, Currency: currency, ReferenceID: &ref,
 	})
 	return a.ID, err
 }

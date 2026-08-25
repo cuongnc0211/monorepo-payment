@@ -13,27 +13,31 @@ import (
 )
 
 const createIntent = `-- name: CreateIntent :one
-INSERT INTO payment_intents (merchant_id, amount, currency, settlement_mode, metadata)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO payment_intents (merchant_id, amount, currency, settlement_mode, payee_id, application_fee, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, merchant_id, amount, currency, status, settlement_mode, payee_id, application_fee, metadata, created_at, updated_at
 `
 
 type CreateIntentParams struct {
-	MerchantID     uuid.UUID `json:"merchant_id"`
-	Amount         int64     `json:"amount"`
-	Currency       string    `json:"currency"`
-	SettlementMode string    `json:"settlement_mode"`
-	Metadata       []byte    `json:"metadata"`
+	MerchantID     uuid.UUID  `json:"merchant_id"`
+	Amount         int64      `json:"amount"`
+	Currency       string     `json:"currency"`
+	SettlementMode string     `json:"settlement_mode"`
+	PayeeID        *uuid.UUID `json:"payee_id"`
+	ApplicationFee *int64     `json:"application_fee"`
+	Metadata       []byte     `json:"metadata"`
 }
 
-// Create a payment intent in its initial 'created' state. settlement_mode is 'direct' for all
-// of M1; the column exists so M3 can pass 'escrow' without a schema change.
+// Create a payment intent in its initial 'created' state. payee_id / application_fee are set only
+// for escrow mode (NULL for direct).
 func (q *Queries) CreateIntent(ctx context.Context, arg CreateIntentParams) (PaymentIntent, error) {
 	row := q.db.QueryRow(ctx, createIntent,
 		arg.MerchantID,
 		arg.Amount,
 		arg.Currency,
 		arg.SettlementMode,
+		arg.PayeeID,
+		arg.ApplicationFee,
 		arg.Metadata,
 	)
 	var i PaymentIntent
