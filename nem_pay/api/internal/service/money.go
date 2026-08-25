@@ -94,7 +94,7 @@ func (s *Intents) Confirm(ctx context.Context, id, merchantID uuid.UUID, token s
 	// Validate the walk to requires_confirmation (payment method now present).
 	from := pi.Status
 	if from == statemachine.StatusCreated {
-		if !statemachine.CanTransition(from, statemachine.StatusRequiresConfirmation) {
+		if !statemachine.CanTransition(pi.SettlementMode, from, statemachine.StatusRequiresConfirmation) {
 			return db.PaymentIntent{}, ErrInvalidState
 		}
 		from = statemachine.StatusRequiresConfirmation
@@ -115,7 +115,7 @@ func (s *Intents) Confirm(ctx context.Context, id, merchantID uuid.UUID, token s
 	if outcome == banksim.Declined {
 		next = statemachine.StatusFailed
 	}
-	if !statemachine.CanTransition(statemachine.StatusRequiresConfirmation, next) {
+	if !statemachine.CanTransition(pi.SettlementMode, statemachine.StatusRequiresConfirmation, next) {
 		return db.PaymentIntent{}, ErrInvalidState
 	}
 
@@ -148,7 +148,7 @@ func (s *Intents) Capture(ctx context.Context, id, merchantID uuid.UUID) (db.Pay
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}
-	if !statemachine.CanTransition(pi.Status, statemachine.StatusCaptured) {
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusCaptured) {
 		return db.PaymentIntent{}, ErrInvalidState
 	}
 
@@ -222,7 +222,7 @@ func (s *Intents) Refund(ctx context.Context, id, merchantID uuid.UUID, amount i
 	if amount == pi.Amount {
 		next = statemachine.StatusRefunded
 	}
-	if !statemachine.CanTransition(pi.Status, next) {
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, next) {
 		return db.PaymentIntent{}, ErrInvalidState
 	}
 
@@ -295,7 +295,7 @@ func (s *Intents) settleOne(ctx context.Context, id, merchantID uuid.UUID) error
 	if pi.Status != statemachine.StatusCaptured {
 		return nil
 	}
-	if !statemachine.CanTransition(pi.Status, statemachine.StatusSettled) {
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusSettled) {
 		return ErrInvalidState
 	}
 	cash, err := s.account(ctx, qtx, merchantID, ledger.TypeAsset, ledger.KindPlatformCash, pi.Currency)
@@ -354,7 +354,7 @@ func (s *Intents) expireOne(ctx context.Context, id, merchantID uuid.UUID) error
 	if err != nil {
 		return err
 	}
-	if !statemachine.CanTransition(pi.Status, statemachine.StatusFailed) {
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusFailed) {
 		return nil // already advanced past a pre-capture state under the lock
 	}
 	updated, err := qtx.UpdateIntentStatus(ctx, db.UpdateIntentStatusParams{ID: pi.ID, Status: statemachine.StatusFailed})

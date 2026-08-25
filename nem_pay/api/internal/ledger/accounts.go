@@ -15,11 +15,17 @@ const (
 	TypeRevenue   = "revenue"
 )
 
-// Account kinds in use for M1 (direct mode only). Escrow kinds
-// (escrow_liability, payable_to_payee, platform_revenue, refund_payable) arrive in M3 as
-// new constants — no schema change, because accounts are already typed and per-reference.
+// Account kinds. Direct-mode kinds date from M1; the escrow kinds are new string constants only —
+// no schema change, because accounts are already typed (asset/liability/revenue) and per-reference.
 const (
+	// Direct mode (M1).
 	KindPlatformCash       = "platform_cash"       // asset  — cash NemPay holds
 	KindAcquirerReceivable = "acquirer_receivable" // asset  — captured, not yet settled
 	KindMerchantPayable    = "merchant_payable"    // liability — owed to the merchant (direct)
+
+	// Escrow mode (M3).
+	KindSegregatedCash  = "segregated_cash"  // asset     — customer funds held segregated, not commingled
+	KindEscrowLiability = "escrow_liability" // liability  — held on behalf of the payee (per intent)
+	KindPayableToPayee  = "payable_to_payee" // liability  — accrued to the payee on release (per payee)
+	KindPlatformRevenue = "platform_revenue" // revenue    — the application fee earned on release
 )

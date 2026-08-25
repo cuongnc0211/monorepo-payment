@@ -122,13 +122,28 @@ new tables (`payee_id` / `application_fee` already exist), and **bank-sim is unc
 - **Rollback:** escrow is purely additive — not creating escrow intents and removing the release
   route reverts behaviour; direct mode is untouched.
 
-## Tasks (to be decomposed in /sdd:tasks)
-Anticipated breakdown — actual `task-NN-*.md` files are produced by the next step:
-1. Migration `0006` + **mode-aware state machine** + escrow account-kind constants.
-2. **Create escrow intent** (validate escrow/payee/fee, immutability) + **mode-aware capture** (→ `captured`).
-3. **Escrow settle** into segregation (→ `held_in_escrow`) — extend the sweep, destination by mode.
-4. **Release** endpoint + service (5-leg posting, idempotent, `FOR UPDATE`) + escrow event types.
-5. **Refund from escrow** (full, from held) + refund-after-release rejection.
-6. **Segregation reconciliation** invariant + `nem_pay/CLAUDE.md` refinement.
-7. **Tests & e2e**: full escrow lifecycle, invariant, idempotent/concurrent release, refund paths,
-   **direct-mode regression**, and a `curl` docker end-to-end.
+## Tasks (execute in order)
+- [x] [task-01 — Migration + mode-aware state machine + account kinds](./task-01-schema-statemachine-accounts.md)
+- [ ] [task-02 — Create escrow intent + mode-aware capture](./task-02-create-escrow-and-capture.md)
+- [ ] [task-03 — Settle into segregation (held_in_escrow)](./task-03-settle-into-escrow.md)
+- [ ] [task-04 — Release to payee minus fee](./task-04-release.md)
+- [ ] [task-05 — Full refund from escrow](./task-05-refund-from-escrow.md)
+- [ ] [task-06 — Segregation reconciliation + constitution refinement](./task-06-segregation-reconciliation.md)
+- [ ] [task-07 — Lifecycle tests + direct regression + e2e](./task-07-tests-and-e2e.md)
+
+**Dependency order:** 01 → 02 → 03 → {04, 05} → 06 → 07. Tasks 04 (release) and 05 (refund) both
+depend only on 03 and can be done in either order.
+
+**Commit convention:** each task lands as **one atomic commit** once its tests pass — conventional,
+component-scoped (`feat(nempay): …`, `test(nempay): …`, `docs(nempay): …`), no cross-task mixing.
+
+## Acceptance coverage (task ↔ spec AC)
+| Task | Covers |
+|---|---|
+| task-01 | AC7, AC8 (foundation) |
+| task-02 | AC1, AC2 |
+| task-03 | AC2b |
+| task-04 | AC3, AC4 |
+| task-05 | AC5 |
+| task-06 | AC6 |
+| task-07 | AC1–AC8 (integration + regression) |
