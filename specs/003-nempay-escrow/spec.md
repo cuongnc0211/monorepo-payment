@@ -1,6 +1,6 @@
 # Spec — NemPay escrow settlement mode (M3)
 
-**ID:** 003-nempay-escrow · **Status:** active · **Author:** cuong.nguyen · **Date:** 2026-08-25
+**ID:** 003-nempay-escrow · **Status:** done · **Author:** cuong.nguyen · **Date:** 2026-08-25
 **Constitution:** ../../CLAUDE.md, ../../nem_pay/CLAUDE.md
 **Plan:** ../../plans/003-nempay-escrow/plan.md
 
@@ -73,37 +73,37 @@ M1, so this extends the **same** gateway additively rather than rewriting it.
 - As an integrator using **direct** mode, nothing changes.
 
 ## Acceptance criteria (testable — the definition of done)
-- [ ] **AC1 — Create escrow intent.** `{escrow:true, payee, application_fee}` creates an escrow-mode
+- [x] **AC1 — Create escrow intent.** `{escrow:true, payee, application_fee}` creates an escrow-mode
   intent; mode / payee / fee are immutable thereafter. A missing/blank payee, or an
   `application_fee` that is negative or greater than the amount, is **rejected** at creation.
-- [ ] **AC2 — Capture (escrow).** Capturing an escrow intent posts **one balanced** transaction that
+- [x] **AC2 — Capture (escrow).** Capturing an escrow intent posts **one balanced** transaction that
   records the pulled funds as an **escrow liability** owed to the payee (backed by an in-transit
   escrow receivable) and moves the intent to `captured`. The amount is a **liability**, never revenue
   or platform cash.
-- [ ] **AC2b — Settle into segregation.** The settlement step moves an escrow intent's funds into a
+- [x] **AC2b — Settle into segregation.** The settlement step moves an escrow intent's funds into a
   **segregated escrow-cash** account (the same money-plane settlement as direct mode, with the
   destination chosen by mode), moves the intent to `held_in_escrow`, and delivers a *held_in_escrow*
   webhook. Each posting is balanced.
-- [ ] **AC3 — Release to payee minus fee.** Releasing a `held_in_escrow` intent posts **one
+- [x] **AC3 — Release to payee minus fee.** Releasing a `held_in_escrow` intent posts **one
   balanced** transaction: debit `escrow-liability` (full), credit `payable-to-payee` (amount − fee),
   credit `platform-revenue` (fee); moves the intent to `released`; delivers an *escrow.released*
   webhook. Fee arithmetic is exact (integer cents).
-- [ ] **AC4 — Idempotent & concurrency-safe release.** A retried release (same `Idempotency-Key`)
+- [x] **AC4 — Idempotent & concurrency-safe release.** A retried release (same `Idempotency-Key`)
   and a concurrent double-release each result in **exactly one** release posting; a distinct release
   attempt on an already-`released` intent is rejected with **no** new posting.
-- [ ] **AC5 — Full refund from escrow.** Refunding a `held_in_escrow` intent posts **one balanced**
+- [x] **AC5 — Full refund from escrow.** Refunding a `held_in_escrow` intent posts **one balanced**
   transaction debiting `escrow-liability` and crediting `refund-to-payer` for the full amount, moves
   the intent to `refunded`, and delivers a *refund* webhook. Refunding a `released` intent is
   **rejected** with no posting.
-- [ ] **AC6 — Segregation invariant.** An escrow liability is **always fully backed**: by an
+- [x] **AC6 — Segregation invariant.** An escrow liability is **always fully backed**: by an
   in-transit escrow receivable before settlement, and by **segregated escrow cash** once settled.
   In particular, for all funds in `held_in_escrow`, the summed `escrow-liability` **equals** the
   segregated escrow-cash balance (both derived from the ledger). Released fees appear in
   `platform-revenue` only **after** release; held money is never revenue.
-- [ ] **AC7 — State-machine integrity.** Only the escrow edges are permitted; illegal operations
+- [x] **AC7 — State-machine integrity.** Only the escrow edges are permitted; illegal operations
   (release a non-held intent, refund a released one, release/refund a direct intent, re-hold an
   already-held intent) are **rejected with no ledger posting**.
-- [ ] **AC8 — Direct mode unaffected.** The existing direct-capture lifecycle, ledger postings, and
+- [x] **AC8 — Direct mode unaffected.** The existing direct-capture lifecycle, ledger postings, and
   reconciliation are unchanged — a regression check across M1's behaviour passes.
 
 ## Constraints (from the constitution or product)
