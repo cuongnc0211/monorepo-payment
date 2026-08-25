@@ -1,0 +1,56 @@
+<% content_for :title, "Order ##{@order.id} — NemLuxury" %>
+
+<%# A pending order splits in two: if it carries a gateway intent id, the charge is genuinely in
+    flight and we wait on the capture webhook; if it has none, the checkout call to NemPay never
+    got off the ground, so the payment was never started. Only auto-refresh in the first case —
+    otherwise the page would reassure "confirming…" forever and hide a failure. %>
+<% awaiting_gateway = @order.pending_payment? && @order.nem_pay_intent_id.present? %>
+<% payment_not_started = @order.pending_payment? && @order.nem_pay_intent_id.blank? %>
+
+<% if awaiting_gateway %>
+  <% content_for :head do %>
+    <meta http-equiv="refresh" content="4">
+  <% end %>
+<% end %>
+
+<section class="wrap order">
+  <%= link_to products_path, class: "back-link" do %>
+    <%= icon("arrow-left", size: 16) %> Back to the collection
+  <% end %>
+
+  <div class="order__panel">
+    <p class="order__num">Order No. <%= @order.id %></p>
+    <h1 class="order__product"><%= @order.product.name %></h1>
+    <p class="order__amount"><%= format_money(@order.amount_cents, @order.currency) %></p>
+
+    <% if payment_not_started %>
+      <span class="status status--failed">
+        <%= icon("shield", size: 15) %> Payment not started
+      </span>
+      <p class="order__note">
+        We couldn’t start this payment with NemPay, so no charge was made. Please try again.
+      </p>
+      <div style="margin-top:1.6rem;">
+        <%= link_to "Try again", product_path(@order.product), class: "btn btn-gold", style: "display:inline-flex;width:auto;" %>
+      </div>
+    <% elsif awaiting_gateway %>
+      <span class="status status--pending">
+        <%= icon("spinner", size: 15, spin: true) %> Confirming payment
+      </span>
+      <p class="order__note">
+        We’re confirming your payment with the bank. This page updates automatically the moment
+        the payment is captured — no need to refresh.
+      </p>
+    <% elsif @order.paid? %>
+      <span class="status status--paid">
+        <%= icon("check", size: 15) %> Paid
+      </span>
+      <p class="order__note">
+        Thank you. Your acquisition is confirmed and our concierge will be in touch to arrange
+        delivery.
+      </p>
+    <% else %>
+      <span class="status status--other"><%= @order.status.humanize %></span>
+    <% end %>
+  </div>
+</section>

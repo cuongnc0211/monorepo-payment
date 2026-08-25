@@ -1,0 +1,54 @@
+<% content_for :title, "#{@product.name} — NemLuxury" %>
+
+<div class="wrap" style="padding-top:2rem;">
+  <%= link_to products_path, class: "back-link" do %>
+    <%= icon("arrow-left", size: 16) %> Back to the collection
+  <% end %>
+</div>
+
+<article class="wrap product">
+  <div class="product__media">
+    <%= product_image_tag(@product, width: 1100, eager: true) %>
+  </div>
+
+  <div class="product__info">
+    <span class="eyebrow"><%= product_category(@product) %></span>
+    <h1 class="product__title"><%= @product.name %></h1>
+    <p class="product__price"><%= format_money(@product.amount_cents, @product.currency) %></p>
+    <p class="product__desc"><%= @product.description %></p>
+
+    <ul class="product__assurance">
+      <li><%= icon("gem", size: 16) %> Bespoke</li>
+      <li><%= icon("check", size: 16) %> One of a kind</li>
+      <li><%= icon("shield", size: 16) %> Secured by NemPay</li>
+    </ul>
+
+    <%# Buy now. The customer picks a TEST payment method that maps to a bank-sim magic token — %>
+    <%# there is deliberately no card-number field: raw card data must never touch NemLuxury. %>
+    <section class="panel" aria-labelledby="acquire-heading">
+      <h2 class="panel__title" id="acquire-heading">Acquire this piece</h2>
+
+      <%= form_with url: checkout_path, method: :post do |f| %>
+        <%= f.hidden_field :product_id, value: @product.id %>
+        <%= f.hidden_field :checkout_token, value: @checkout_token %>
+
+        <div class="field">
+          <%= f.label :payment_method, "Payment method", class: "field__label" %>
+          <div class="select">
+            <%= f.select :payment_method, [
+                  ["Valid test card", "tok_ok"],
+                  ["Declined test card", "tok_declined"],
+                  ["Bank timeout (test)", "tok_timeout"]
+                ] %>
+          </div>
+          <p class="field__hint">
+            Test tokens only — no real card is entered. Card details never touch NemLuxury;
+            payment is handled entirely by NemPay.
+          </p>
+        </div>
+
+        <%= f.submit "Acquire now", class: "btn btn-gold" %>
+      <% end %>
+    </section>
+  </div>
+</article>

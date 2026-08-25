@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title><%= content_for(:title) || "NemLuxury — Objects of Rare Distinction" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="NemLuxury">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0b0b0d">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%= stylesheet_link_tag "application" %>
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="wrap site-header__inner">
+        <%= link_to root_path, class: "brand", "aria-label": "NemLuxury home" do %>
+          <span class="brand__mark">Nem<em>Luxury</em></span>
+          <span class="brand__tag">Maison</span>
+        <% end %>
+        <span class="site-header__meta">Secured by <b>NemPay</b></span>
+      </div>
+    </header>
+
+    <% flash.each do |type, message| %>
+      <% next if message.blank? %>
+      <div class="flash">
+        <p class="flash__msg flash__msg--<%= type == "notice" ? "notice" : "alert" %>" role="alert">
+          <%= icon(type == "notice" ? "check" : "shield", size: 16) %>
+          <span><%= message %></span>
+        </p>
+      </div>
+    <% end %>
+
+    <main class="site-main">
+      <%= yield %>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap site-footer__inner">
+        <span>&copy; <%= Time.current.year %> <b>NemLuxury</b> — Fine goods, settled directly.</span>
+        <span>Payments processed &amp; secured by <b>NemPay</b></span>
+      </div>
+    </footer>
+  </body>
+</html>

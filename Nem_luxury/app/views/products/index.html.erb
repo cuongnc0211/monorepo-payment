@@ -1,0 +1,53 @@
+<% content_for :title, "NemLuxury — Objects of Rare Distinction" %>
+
+<section class="wrap hero">
+  <span class="eyebrow">The Maison</span>
+  <h1 class="hero__title">Objects of<br><em>Rare Distinction</em></h1>
+  <p class="hero__lede">
+    A private catalogue of the exceptional — motorcars, timepieces, vessels and aircraft,
+    each acquired directly and settled securely through NemPay.
+  </p>
+  <div class="hero__cta">
+    <a href="#collection" class="btn btn-ghost">
+      View the collection <%= icon("arrow-right", size: 16) %>
+    </a>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="collection" class="wrap mt-gap">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Curated</span>
+      <h2>The Collection</h2>
+    </div>
+    <span class="section-head__count"><%= pluralize(@products.size, "piece") %></span>
+  </div>
+
+  <% if @products.any? %>
+    <ul class="collection" style="list-style:none;margin:0;padding:0;">
+      <% @products.each do |product| %>
+        <li class="card">
+          <div class="card__media">
+            <%= product_image_tag(product, width: 700) %>
+          </div>
+          <div class="card__body">
+            <div>
+              <span class="card__cat"><%= product_category(product) %></span>
+              <h3 class="card__name">
+                <%= link_to product.name, product_path(product), class: "card__link" %>
+              </h3>
+            </div>
+            <span class="card__price"><%= format_money(product.amount_cents, product.currency) %></span>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <div class="empty">
+      <h2>The gallery is being prepared</h2>
+      <p>New acquisitions arrive shortly. Please return soon.</p>
+    </div>
+  <% end %>
+</section>
