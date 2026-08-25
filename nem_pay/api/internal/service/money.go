@@ -67,6 +67,7 @@ var (
 	ErrBankDeclined              = errors.New("the bank declined the operation")
 	ErrRefundExceedsCapture      = errors.New("refund amount exceeds the captured amount")
 	ErrPartialRefundBeforeSettle = errors.New("a partial refund is only allowed after the intent has settled; refund in full or wait for settlement")
+	ErrPartialEscrowRefund       = errors.New("a partial refund from escrow is not supported; refund the full amount")
 )
 
 // sweepBatch bounds how many intents one settle/expiry pass claims.
@@ -219,12 +220,41 @@ func (s *Intents) Refund(ctx context.Context, id, merchantID uuid.UUID, amount i
 	if err != nil {
 		return db.PaymentIntent{}, err
 	}
-	// An escrow refund posts to different accounts (escrow_liability / segregated_cash) and is
-	// implemented separately. The direct-mode postings below MUST NOT run for an escrow intent —
-	// they would touch merchant_payable/acquirer_receivable and strand the held funds while the
-	// intent falsely reports refunded. Reject escrow here until the escrow refund path exists.
+	// Escrow refund: full amount only, and only while held_in_escrow. Returns the held money to the
+	// payer by discharging the escrow liability and reducing segregated cash (Dr escrow_liability /
+	// Cr segregated_cash). Refunding a released intent is rejected by the state machine. Ledger-only.
 	if pi.SettlementMode == statemachine.SettlementEscrow {
-		return db.PaymentIntent{}, ErrInvalidState
+		if amount != pi.Amount {
+			return db.PaymentIntent{}, ErrPartialEscrowRefund
+		}
+		if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusRefunded) {
+			return db.PaymentIntent{}, ErrInvalidState
+		}
+		escrowLiab, err := s.perRefAccount(dbCtx, qtx, merchantID, ledger.TypeLiability, ledger.KindEscrowLiability, pi.Currency, pi.ID)
+		if err != nil {
+			return db.PaymentIntent{}, err
+		}
+		segCash, err := s.account(dbCtx, qtx, merchantID, ledger.TypeAsset, ledger.KindSegregatedCash, pi.Currency)
+		if err != nil {
+			return db.PaymentIntent{}, err
+		}
+		if _, err := ledger.PostTransaction(dbCtx, qtx, merchantID, "refund", &pi.ID, []ledger.Entry{
+			{AccountID: escrowLiab, Debit: amount, Currency: pi.Currency},
+			{AccountID: segCash, Credit: amount, Currency: pi.Currency},
+		}); err != nil {
+			return db.PaymentIntent{}, err
+		}
+		updated, err := qtx.UpdateIntentStatus(dbCtx, db.UpdateIntentStatusParams{ID: pi.ID, Status: statemachine.StatusRefunded})
+		if err != nil {
+			return db.PaymentIntent{}, err
+		}
+		if err := emit(dbCtx, qtx, updated); err != nil {
+			return db.PaymentIntent{}, err
+		}
+		if err := tx.Commit(dbCtx); err != nil {
+			return db.PaymentIntent{}, err
+		}
+		return updated, nil
 	}
 	if amount > pi.Amount {
 		return db.PaymentIntent{}, ErrRefundExceedsCapture

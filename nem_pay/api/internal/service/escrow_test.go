@@ -277,27 +277,55 @@ func TestEscrow_ReleaseNonHeldRejected(t *testing.T) {
 	}
 }
 
-// The direct-mode refund path must NOT touch an escrow intent (it would post to the wrong
-// accounts and strand the held funds). The escrow refund is a separate path; until then /refund on
-// a held escrow intent is rejected and the held funds are untouched. (Replaced when escrow refund lands.)
-func TestEscrow_DirectRefundPathRejectsEscrow(t *testing.T) {
+// Full refund from escrow returns the held money to the payer: the escrow liability is discharged
+// and segregated cash reduced, both to zero; the intent becomes refunded.
+func TestEscrow_FullRefundFromHeld(t *testing.T) {
+	s, q, pool, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	const amt = 1000
+	payee := uuid.New()
+	pi := heldEscrow(t, s, q, merchant, payee, amt, 100)
+
+	got, err := s.Refund(ctx, pi.ID, merchant, amt)
+	if err != nil {
+		t.Fatalf("full escrow refund: %v", err)
+	}
+	if got.Status != statemachine.StatusRefunded {
+		t.Fatalf("want refunded, got %s", got.Status)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != 0 {
+		t.Fatalf("escrow_liability after refund want 0, got %d", b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != 0 {
+		t.Fatalf("segregated_cash after refund want 0, got %d", b)
+	}
+	var n int
+	_ = pool.QueryRow(ctx, "SELECT count(*) FROM transactions WHERE kind='refund' AND reference_id=$1", pi.ID).Scan(&n)
+	if n != 1 {
+		t.Fatalf("want 1 refund tx, got %d", n)
+	}
+}
+
+func TestEscrow_PartialRefundRejected(t *testing.T) {
 	s, q, _, merchant := newMoneyFixture(t)
 	ctx := context.Background()
 	payee := uuid.New()
 	pi := heldEscrow(t, s, q, merchant, payee, 1000, 100)
+	if _, err := s.Refund(ctx, pi.ID, merchant, 400); err != ErrPartialEscrowRefund {
+		t.Fatalf("partial escrow refund want ErrPartialEscrowRefund, got %v", err)
+	}
+}
 
+func TestEscrow_RefundAfterReleaseRejected(t *testing.T) {
+	s, q, _, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	payee := uuid.New()
+	pi := heldEscrow(t, s, q, merchant, payee, 1000, 100)
+	if _, err := s.Release(ctx, pi.ID, merchant); err != nil {
+		t.Fatalf("release: %v", err)
+	}
 	if _, err := s.Refund(ctx, pi.ID, merchant, 1000); err != ErrInvalidState {
-		t.Fatalf("escrow refund via direct path want ErrInvalidState, got %v", err)
-	}
-	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != -1000 {
-		t.Fatalf("held escrow_liability must be untouched, got %d", b)
-	}
-	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != 1000 {
-		t.Fatalf("segregated_cash must be untouched, got %d", b)
-	}
-	got, _ := s.Get(ctx, pi.ID, merchant)
-	if got.Status != statemachine.StatusHeldInEscrow {
-		t.Fatalf("intent must stay held_in_escrow, got %s", got.Status)
+		t.Fatalf("refund after release want ErrInvalidState, got %v", err)
 	}
 }
 

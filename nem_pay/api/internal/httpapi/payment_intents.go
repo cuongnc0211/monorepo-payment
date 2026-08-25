@@ -275,6 +275,8 @@ func mapMoneyError(c *gin.Context, err error) bool {
 		respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "refund_too_large", err.Error(), "amount")
 	case errors.Is(err, service.ErrPartialRefundBeforeSettle):
 		respondError(c, http.StatusUnprocessableEntity, errTypeInvalidRequest, "partial_refund_before_settle", err.Error(), "amount")
+	case errors.Is(err, service.ErrPartialEscrowRefund):
+		respondError(c, http.StatusUnprocessableEntity, errTypeInvalidRequest, "partial_escrow_refund", err.Error(), "amount")
 	case errors.Is(err, service.ErrInvalidAmount):
 		respondError(c, http.StatusBadRequest, errTypeInvalidRequest, "invalid_amount", err.Error(), "amount")
 	case errors.Is(err, service.ErrBankDeclined):
