@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countKeysForMerchant = `-- name: CountKeysForMerchant :one
@@ -89,4 +90,47 @@ func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (Api
 		&i.RevokedAt,
 	)
 	return i, err
+}
+
+const listAPIKeysForMerchant = `-- name: ListAPIKeysForMerchant :many
+SELECT id, kind, token_prefix, created_at, revoked_at
+FROM api_keys
+WHERE merchant_id = $1
+ORDER BY created_at DESC
+`
+
+type ListAPIKeysForMerchantRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Kind        string             `json:"kind"`
+	TokenPrefix string             `json:"token_prefix"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+}
+
+// Portal API-keys view. Returns only the non-secret prefix (never token_hash) so a full key can
+// never be reconstructed from this endpoint.
+func (q *Queries) ListAPIKeysForMerchant(ctx context.Context, merchantID uuid.UUID) ([]ListAPIKeysForMerchantRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysForMerchant, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAPIKeysForMerchantRow
+	for rows.Next() {
+		var i ListAPIKeysForMerchantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.TokenPrefix,
+			&i.CreatedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -42,3 +42,14 @@ SELECT (COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0))::numeric AS bala
 FROM entries e
 JOIN accounts a ON e.account_id = a.id
 WHERE a.merchant_id = $1 AND a.kind = $2 AND a.currency = $3;
+
+-- name: BalancesForMerchant :many
+-- Portal balances view: derived balance per (type, kind, currency) for a merchant. Balance is
+-- SUM(debit) - SUM(credit); the money truth is the entries, never a stored column.
+SELECT a.type, a.kind, a.currency,
+       (COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0))::bigint AS balance
+FROM accounts a
+LEFT JOIN entries e ON e.account_id = a.id
+WHERE a.merchant_id = $1
+GROUP BY a.type, a.kind, a.currency
+ORDER BY a.currency, a.kind;

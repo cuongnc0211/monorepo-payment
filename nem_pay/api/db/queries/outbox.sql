@@ -44,3 +44,12 @@ WHERE id = $1;
 -- One row per delivery attempt (the delivery log).
 INSERT INTO webhook_deliveries (outbox_id, attempt, status_code, ok, error)
 VALUES ($1, $2, $3, $4, $5);
+
+-- name: ListWebhookEventsForMerchant :many
+-- Portal webhook log: emitted events for a merchant, newest first. Delivery state is derived by
+-- the caller from status + attempts (delivered / dead=failed / pending+attempts>0=retrying).
+SELECT id, event_id, event_type, status, attempts, last_error, created_at
+FROM outbox
+WHERE merchant_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;

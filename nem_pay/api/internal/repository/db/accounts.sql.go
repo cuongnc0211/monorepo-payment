@@ -12,6 +12,50 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const balancesForMerchant = `-- name: BalancesForMerchant :many
+SELECT a.type, a.kind, a.currency,
+       (COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0))::bigint AS balance
+FROM accounts a
+LEFT JOIN entries e ON e.account_id = a.id
+WHERE a.merchant_id = $1
+GROUP BY a.type, a.kind, a.currency
+ORDER BY a.currency, a.kind
+`
+
+type BalancesForMerchantRow struct {
+	Type     string `json:"type"`
+	Kind     string `json:"kind"`
+	Currency string `json:"currency"`
+	Balance  int64  `json:"balance"`
+}
+
+// Portal balances view: derived balance per (type, kind, currency) for a merchant. Balance is
+// SUM(debit) - SUM(credit); the money truth is the entries, never a stored column.
+func (q *Queries) BalancesForMerchant(ctx context.Context, merchantID uuid.UUID) ([]BalancesForMerchantRow, error) {
+	rows, err := q.db.Query(ctx, balancesForMerchant, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BalancesForMerchantRow
+	for rows.Next() {
+		var i BalancesForMerchantRow
+		if err := rows.Scan(
+			&i.Type,
+			&i.Kind,
+			&i.Currency,
+			&i.Balance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAccountBalance = `-- name: GetAccountBalance :one
 SELECT (COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0))::numeric AS balance
 FROM entries

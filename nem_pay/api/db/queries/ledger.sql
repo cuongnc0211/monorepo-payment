@@ -11,3 +11,15 @@ RETURNING *;
 INSERT INTO entries (transaction_id, account_id, debit, credit, currency)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
+
+-- name: LedgerForIntent :many
+-- The transaction(s)/entries backing one intent (capture, settle, refund, ...), for the portal's
+-- payment detail. Scoped by merchant so another merchant's intent yields no rows.
+SELECT t.id AS transaction_id, t.kind AS transaction_kind, t.created_at AS transaction_created_at,
+       e.id AS entry_id, a.type AS account_type, a.kind AS account_kind,
+       e.debit, e.credit, e.currency
+FROM transactions t
+JOIN entries e   ON e.transaction_id = t.id
+JOIN accounts a  ON a.id = e.account_id
+WHERE t.merchant_id = $1 AND t.reference_id = $2
+ORDER BY t.created_at, e.created_at;

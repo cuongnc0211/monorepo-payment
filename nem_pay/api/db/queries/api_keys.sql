@@ -12,3 +12,11 @@ WHERE token_prefix = $1 AND revoked_at IS NULL;
 -- name: CountKeysForMerchant :one
 -- Used by the dev seed to stay idempotent (only insert keys if a merchant has none yet).
 SELECT count(*) FROM api_keys WHERE merchant_id = $1;
+
+-- name: ListAPIKeysForMerchant :many
+-- Portal API-keys view. Returns only the non-secret prefix (never token_hash) so a full key can
+-- never be reconstructed from this endpoint.
+SELECT id, kind, token_prefix, created_at, revoked_at
+FROM api_keys
+WHERE merchant_id = $1
+ORDER BY created_at DESC;

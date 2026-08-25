@@ -24,7 +24,7 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(cors(corsOrigin())) // browser-facing endpoints (/v1/tokens); answers preflight before auth
+	r.Use(cors(corsOrigins())) // browser-facing endpoints (/v1/tokens); answers preflight before auth
 	r.HandleMethodNotAllowed = true // so NoMethod (405) fires instead of falling through to 404
 
 	// Unknown path / unsupported method still return the standard error envelope, so a client
@@ -44,27 +44,36 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	// layer above. It is NOT under the API-key group.
 	r.POST("/v1/portal/login", session.login)
 
-	// Authenticated surface.
+	// Authenticated surface. Auth is applied PER GROUP (not on the whole /v1) so the read group can
+	// accept a portal session as well as an API key.
 	v1 := r.Group("/v1")
-	v1.Use(apiKeyAuth(q))
+	portal := &portalHandler{q: q}
 
-	// Tokenization: called from the browser with a PUBLISHABLE key. The card PAN reaches the
-	// gateway here (never a merchant), is tokenized, and only the token flows onward.
+	// Tokenization: browser call with a PUBLISHABLE key. The card PAN reaches the gateway here
+	// (never a merchant), is tokenized, and only the token flows onward.
 	tokens := v1.Group("/tokens")
-	tokens.Use(publishableOnly())
+	tokens.Use(apiKeyAuth(q), publishableOnly())
 	tokens.POST("", (&tokenHandler{}).create)
 
-	// Payment intents: secret-key only for all of M1 (reads included).
-	pi := v1.Group("/payment_intents")
-	pi.Use(secretOnly())
-	pi.POST("", WithIdempotency(q, intents.create))
-	pi.GET("/:id", intents.get)
-	pi.GET("", intents.list)
-	// Money verbs — each idempotent (task-03) and gated by the state machine (task-05).
-	pi.POST("/:id/confirm", WithIdempotency(q, intents.confirm))
-	pi.POST("/:id/capture", WithIdempotency(q, intents.capture))
-	pi.POST("/:id/refund", WithIdempotency(q, intents.refund))
-	pi.POST("/:id/release", WithIdempotency(q, intents.release)) // escrow only
+	// Money-mutating routes: SECRET key only — a browser session can never reach these.
+	piWrite := v1.Group("/payment_intents")
+	piWrite.Use(apiKeyAuth(q), secretOnly())
+	piWrite.POST("", WithIdempotency(q, intents.create))
+	piWrite.POST("/:id/confirm", WithIdempotency(q, intents.confirm))
+	piWrite.POST("/:id/capture", WithIdempotency(q, intents.capture))
+	piWrite.POST("/:id/refund", WithIdempotency(q, intents.refund))
+	piWrite.POST("/:id/release", WithIdempotency(q, intents.release)) // escrow only
+
+	// Read surface: an API key OR a portal session (authAny). Every handler scopes to the
+	// credential's merchant, so a session sees only its own tenant's data.
+	reads := v1.Group("")
+	reads.Use(session.authAny())
+	reads.GET("/payment_intents", intents.list)
+	reads.GET("/payment_intents/:id", intents.get)
+	reads.GET("/payment_intents/:id/ledger", portal.ledger)
+	reads.GET("/balances", portal.balances)
+	reads.GET("/webhook_events", portal.webhookEvents)
+	reads.GET("/api_keys", portal.apiKeys)
 
 	return r
 }

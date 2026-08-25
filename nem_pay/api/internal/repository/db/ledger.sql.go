@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const insertEntry = `-- name: InsertEntry :one
@@ -73,4 +74,64 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const ledgerForIntent = `-- name: LedgerForIntent :many
+SELECT t.id AS transaction_id, t.kind AS transaction_kind, t.created_at AS transaction_created_at,
+       e.id AS entry_id, a.type AS account_type, a.kind AS account_kind,
+       e.debit, e.credit, e.currency
+FROM transactions t
+JOIN entries e   ON e.transaction_id = t.id
+JOIN accounts a  ON a.id = e.account_id
+WHERE t.merchant_id = $1 AND t.reference_id = $2
+ORDER BY t.created_at, e.created_at
+`
+
+type LedgerForIntentParams struct {
+	MerchantID  uuid.UUID  `json:"merchant_id"`
+	ReferenceID *uuid.UUID `json:"reference_id"`
+}
+
+type LedgerForIntentRow struct {
+	TransactionID        uuid.UUID          `json:"transaction_id"`
+	TransactionKind      string             `json:"transaction_kind"`
+	TransactionCreatedAt pgtype.Timestamptz `json:"transaction_created_at"`
+	EntryID              uuid.UUID          `json:"entry_id"`
+	AccountType          string             `json:"account_type"`
+	AccountKind          string             `json:"account_kind"`
+	Debit                int64              `json:"debit"`
+	Credit               int64              `json:"credit"`
+	Currency             string             `json:"currency"`
+}
+
+// The transaction(s)/entries backing one intent (capture, settle, refund, ...), for the portal's
+// payment detail. Scoped by merchant so another merchant's intent yields no rows.
+func (q *Queries) LedgerForIntent(ctx context.Context, arg LedgerForIntentParams) ([]LedgerForIntentRow, error) {
+	rows, err := q.db.Query(ctx, ledgerForIntent, arg.MerchantID, arg.ReferenceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerForIntentRow
+	for rows.Next() {
+		var i LedgerForIntentRow
+		if err := rows.Scan(
+			&i.TransactionID,
+			&i.TransactionKind,
+			&i.TransactionCreatedAt,
+			&i.EntryID,
+			&i.AccountType,
+			&i.AccountKind,
+			&i.Debit,
+			&i.Credit,
+			&i.Currency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

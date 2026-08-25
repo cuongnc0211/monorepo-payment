@@ -150,6 +150,60 @@ func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) (Out
 	return i, err
 }
 
+const listWebhookEventsForMerchant = `-- name: ListWebhookEventsForMerchant :many
+SELECT id, event_id, event_type, status, attempts, last_error, created_at
+FROM outbox
+WHERE merchant_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListWebhookEventsForMerchantParams struct {
+	MerchantID uuid.UUID `json:"merchant_id"`
+	Limit      int32     `json:"limit"`
+	Offset     int32     `json:"offset"`
+}
+
+type ListWebhookEventsForMerchantRow struct {
+	ID        uuid.UUID          `json:"id"`
+	EventID   uuid.UUID          `json:"event_id"`
+	EventType string             `json:"event_type"`
+	Status    string             `json:"status"`
+	Attempts  int32              `json:"attempts"`
+	LastError *string            `json:"last_error"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Portal webhook log: emitted events for a merchant, newest first. Delivery state is derived by
+// the caller from status + attempts (delivered / dead=failed / pending+attempts>0=retrying).
+func (q *Queries) ListWebhookEventsForMerchant(ctx context.Context, arg ListWebhookEventsForMerchantParams) ([]ListWebhookEventsForMerchantRow, error) {
+	rows, err := q.db.Query(ctx, listWebhookEventsForMerchant, arg.MerchantID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWebhookEventsForMerchantRow
+	for rows.Next() {
+		var i ListWebhookEventsForMerchantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.EventType,
+			&i.Status,
+			&i.Attempts,
+			&i.LastError,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOutboxDead = `-- name: MarkOutboxDead :exec
 UPDATE outbox
 SET attempts = attempts + 1, status = 'dead', last_error = $2
