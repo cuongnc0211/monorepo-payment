@@ -28,6 +28,8 @@ func eventTypeFor(status string) string {
 		return "payment_intent.captured"
 	case statemachine.StatusSettled:
 		return "payment_intent.settled"
+	case statemachine.StatusHeldInEscrow:
+		return "payment_intent.held_in_escrow"
 	case statemachine.StatusRefunded:
 		return "payment_intent.refunded"
 	case statemachine.StatusPartiallyRefunded:
@@ -302,10 +304,19 @@ func (s *Intents) settleOne(ctx context.Context, id, merchantID uuid.UUID) error
 	if pi.Status != statemachine.StatusCaptured {
 		return nil
 	}
-	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, statemachine.StatusSettled) {
+	// Destination decided by mode: direct settles into platform_cash (→ settled); escrow settles
+	// into a SEGREGATED account and holds the funds (→ held_in_escrow). The escrow_liability posted
+	// at capture stays; from here it is backed by segregated cash, not the receivable.
+	target := statemachine.StatusSettled
+	cashKind := ledger.KindPlatformCash
+	if pi.SettlementMode == statemachine.SettlementEscrow {
+		target = statemachine.StatusHeldInEscrow
+		cashKind = ledger.KindSegregatedCash
+	}
+	if !statemachine.CanTransition(pi.SettlementMode, pi.Status, target) {
 		return ErrInvalidState
 	}
-	cash, err := s.account(ctx, qtx, merchantID, ledger.TypeAsset, ledger.KindPlatformCash, pi.Currency)
+	cash, err := s.account(ctx, qtx, merchantID, ledger.TypeAsset, cashKind, pi.Currency)
 	if err != nil {
 		return err
 	}
@@ -319,7 +330,7 @@ func (s *Intents) settleOne(ctx context.Context, id, merchantID uuid.UUID) error
 	}); err != nil {
 		return err
 	}
-	updated, err := qtx.UpdateIntentStatus(ctx, db.UpdateIntentStatusParams{ID: pi.ID, Status: statemachine.StatusSettled})
+	updated, err := qtx.UpdateIntentStatus(ctx, db.UpdateIntentStatusParams{ID: pi.ID, Status: target})
 	if err != nil {
 		return err
 	}

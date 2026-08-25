@@ -103,4 +103,43 @@ func TestEscrow_CaptureHoldsAsLiability(t *testing.T) {
 	}
 }
 
+// The settle sweep moves an escrow intent's funds into a segregated account and holds them
+// (→ held_in_escrow); the escrow_liability stays, now backed by segregated cash, not the receivable.
+func TestEscrow_SettleIntoSegregation(t *testing.T) {
+	s, q, pool, merchant := newMoneyFixture(t)
+	ctx := context.Background()
+	const amt = 250000
+	payee := uuid.New()
+	pi := mkEscrowIntent(t, q, merchant, payee, amt, 5000)
+	mustConfirmCapture(t, s, pi.ID, merchant)
+
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != 0 {
+		t.Fatalf("segregated_cash before settle want 0, got %d", b)
+	}
+
+	n, err := s.SettleDueIntents(ctx, 0)
+	if err != nil || n != 1 {
+		t.Fatalf("settle want 1, got n=%d err=%v", n, err)
+	}
+	got, _ := s.Get(ctx, pi.ID, merchant)
+	if got.Status != statemachine.StatusHeldInEscrow {
+		t.Fatalf("want held_in_escrow, got %s", got.Status)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindSegregatedCash); b != amt {
+		t.Fatalf("segregated_cash want %d, got %d", amt, b)
+	}
+	if b := bal(t, q, merchant, ledger.TypeAsset, ledger.KindAcquirerReceivable); b != 0 {
+		t.Fatalf("acquirer_receivable after settle want 0, got %d", b)
+	}
+	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != -amt {
+		t.Fatalf("escrow_liability after settle want %d (still held), got %d", -amt, b)
+	}
+	// One held_in_escrow event emitted.
+	var n2 int
+	_ = pool.QueryRow(ctx, "SELECT count(*) FROM outbox WHERE event_type='payment_intent.held_in_escrow'").Scan(&n2)
+	if n2 != 1 {
+		t.Fatalf("want 1 held_in_escrow event, got %d", n2)
+	}
+}
+
 func ptr64(v int64) *int64 { return &v }
