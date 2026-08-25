@@ -1,5 +1,10 @@
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
+import Payments from "./pages/Payments";
+import PaymentDetail from "./pages/PaymentDetail";
+import Balances from "./pages/Balances";
+import Webhooks from "./pages/Webhooks";
+import ApiKeys from "./pages/ApiKeys";
 import AppLayout from "./components/AppLayout";
 import { RequireAuth } from "./auth/auth";
 
@@ -15,15 +20,11 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route
-          index
-          element={
-            <div className="placeholder">
-              <h1>Signed in</h1>
-              <p className="muted">Dashboard pages arrive in the next task.</p>
-            </div>
-          }
-        />
+        <Route index element={<Payments />} />
+        <Route path="payments/:id" element={<PaymentDetail />} />
+        <Route path="balances" element={<Balances />} />
+        <Route path="webhooks" element={<Webhooks />} />
+        <Route path="keys" element={<ApiKeys />} />
       </Route>
     </Routes>
   );
