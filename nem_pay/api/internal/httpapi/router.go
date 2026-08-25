@@ -20,6 +20,7 @@ import (
 func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	q := db.New(pool)
 	intents := &intentHandler{svc: service.NewIntents(pool, bank)}
+	session := newSessionHandler(q)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -38,6 +39,10 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	})
 
 	r.GET("/v1/health", health)
+
+	// Portal login is public (it mints the session); it is reachable cross-origin via the CORS
+	// layer above. It is NOT under the API-key group.
+	r.POST("/v1/portal/login", session.login)
 
 	// Authenticated surface.
 	v1 := r.Group("/v1")

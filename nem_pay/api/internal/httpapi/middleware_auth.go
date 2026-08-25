@@ -1,14 +1,37 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/nempay/api/internal/apikey"
 	"github.com/nempay/api/internal/repository/db"
 )
+
+// errNoKeyMatch is returned by lookupAPIKey when the token authenticates against no active key —
+// distinct from a DB error so callers can map it to 401 (not 500).
+var errNoKeyMatch = errors.New("no matching api key")
+
+// lookupAPIKey resolves a raw token to its (merchant, kind) by the indexed prefix + constant-time
+// hash compare. Shared by apiKeyAuth and authAny so the two credential paths stay in step.
+func lookupAPIKey(ctx context.Context, q *db.Queries, token string) (uuid.UUID, string, error) {
+	candidates, err := q.GetKeysByPrefix(ctx, apikey.Prefix(token))
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	hash := apikey.Hash(token)
+	for _, k := range candidates {
+		if apikey.Equal(k.TokenHash, hash) {
+			return k.MerchantID, k.Kind, nil
+		}
+	}
+	return uuid.Nil, "", errNoKeyMatch
+}
 
 // apiKeyAuth authenticates a request from its `Authorization: Bearer <token>` header. It
 // narrows candidates by the indexed prefix, then confirms with a constant-time hash compare,
@@ -23,23 +46,19 @@ func apiKeyAuth(q *db.Queries) gin.HandlerFunc {
 			return
 		}
 
-		candidates, err := q.GetKeysByPrefix(c.Request.Context(), apikey.Prefix(token))
+		merchantID, kind, err := lookupAPIKey(c.Request.Context(), q, token)
+		if errors.Is(err, errNoKeyMatch) {
+			respondError(c, http.StatusUnauthorized, errTypeAuth, "invalid_api_key",
+				"the provided API key is invalid or has been revoked", "")
+			return
+		}
 		if err != nil {
 			respondError(c, http.StatusInternalServerError, errTypeAPI, "auth_lookup_failed",
 				"could not verify the API key", "")
 			return
 		}
-
-		hash := apikey.Hash(token)
-		for _, k := range candidates {
-			if apikey.Equal(k.TokenHash, hash) {
-				setAuth(c, k.MerchantID, k.Kind)
-				c.Next()
-				return
-			}
-		}
-		respondError(c, http.StatusUnauthorized, errTypeAuth, "invalid_api_key",
-			"the provided API key is invalid or has been revoked", "")
+		setAuth(c, merchantID, kind)
+		c.Next()
 	}
 }
 
