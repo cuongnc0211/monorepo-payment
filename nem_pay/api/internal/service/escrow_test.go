@@ -160,7 +160,7 @@ func heldEscrow(t *testing.T, s *Intents, q *db.Queries, merchant, payee uuid.UU
 }
 
 func TestEscrow_Release(t *testing.T) {
-	s, q, _, merchant := newMoneyFixture(t)
+	s, q, pool, merchant := newMoneyFixture(t)
 	ctx := context.Background()
 	const amt, fee = 250000, 5000
 	payee := uuid.New()
@@ -172,6 +172,12 @@ func TestEscrow_Release(t *testing.T) {
 	}
 	if got.Status != statemachine.StatusReleased {
 		t.Fatalf("want released, got %s", got.Status)
+	}
+	// An escrow.released event is emitted for this intent.
+	var nRel int
+	_ = pool.QueryRow(ctx, "SELECT count(*) FROM outbox WHERE event_type='escrow.released' AND payload->>'id'=$1", pi.ID.String()).Scan(&nRel)
+	if nRel != 1 {
+		t.Fatalf("want 1 escrow.released event, got %d", nRel)
 	}
 	// escrow_liability=0, segregated_cash=0, platform_cash=+amt, payee=-(amt-fee), revenue=-fee.
 	if b := balRef(t, q, merchant, ledger.TypeLiability, ledger.KindEscrowLiability, pi.ID); b != 0 {

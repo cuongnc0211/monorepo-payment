@@ -1,6 +1,6 @@
 # Plan — NemPay escrow settlement mode (M3)
 
-**ID:** 003-nempay-escrow · **Status:** active
+**ID:** 003-nempay-escrow · **Status:** complete (all tasks done; escrow suite + direct regression green + live docker e2e)
 **Spec:** ../../specs/003-nempay-escrow/spec.md
 **Constitution:** ../../CLAUDE.md, ../../nem_pay/CLAUDE.md
 
@@ -129,7 +129,7 @@ new tables (`payee_id` / `application_fee` already exist), and **bank-sim is unc
 - [x] [task-04 — Release to payee minus fee](./task-04-release.md)
 - [x] [task-05 — Full refund from escrow](./task-05-refund-from-escrow.md)
 - [x] [task-06 — Segregation reconciliation + constitution refinement](./task-06-segregation-reconciliation.md)
-- [ ] [task-07 — Lifecycle tests + direct regression + e2e](./task-07-tests-and-e2e.md)
+- [x] [task-07 — Lifecycle tests + direct regression + e2e](./task-07-tests-and-e2e.md)
 
 **Dependency order:** 01 → 02 → 03 → {04, 05} → 06 → 07. Tasks 04 (release) and 05 (refund) both
 depend only on 03 and can be done in either order.
