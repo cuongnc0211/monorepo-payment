@@ -23,6 +23,7 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(cors(corsOrigin())) // browser-facing endpoints (/v1/tokens); answers preflight before auth
 	r.HandleMethodNotAllowed = true // so NoMethod (405) fires instead of falling through to 404
 
 	// Unknown path / unsupported method still return the standard error envelope, so a client
@@ -41,6 +42,12 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	// Authenticated surface.
 	v1 := r.Group("/v1")
 	v1.Use(apiKeyAuth(q))
+
+	// Tokenization: called from the browser with a PUBLISHABLE key. The card PAN reaches the
+	// gateway here (never a merchant), is tokenized, and only the token flows onward.
+	tokens := v1.Group("/tokens")
+	tokens.Use(publishableOnly())
+	tokens.POST("", (&tokenHandler{}).create)
 
 	// Payment intents: secret-key only for all of M1 (reads included).
 	pi := v1.Group("/payment_intents")

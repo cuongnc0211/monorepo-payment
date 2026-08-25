@@ -19,6 +19,12 @@ components:
         A merchant secret key (sk_...) as `Authorization: Bearer <key>`. Required for every
         payment-intent route. A publishable key (pk_...) authenticates but is refused (403) on
         these routes.
+    PublishableKey:
+      type: http
+      scheme: bearer
+      description: >
+        A merchant publishable key (pk_...) as `Authorization: Bearer <key>`. Safe to expose in a
+        browser. Used only for /v1/tokens; a secret key is refused (403) there.
   schemas:
     Error:
       type: object
@@ -80,6 +86,47 @@ paths:
                 type: object
                 properties:
                   status: { type: string, example: ok }
+
+  /v1/tokens:
+    post:
+      summary: Tokenize a card (browser-facing, publishable key)
+      description: >
+        Called from the browser with a publishable key; the card PAN reaches the gateway here (never
+        a merchant server) and is exchanged for a single-use payment-method token. The PAN is not
+        stored — only brand and last4 are derived. CORS-enabled for the configured merchant origin.
+      security: [{ PublishableKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, exp_month, exp_year, cvc]
+              properties:
+                number: { type: string, example: "4242424242424242" }
+                exp_month: { type: integer, example: 12 }
+                exp_year: { type: integer, example: 2030 }
+                cvc: { type: string, example: "123" }
+      responses:
+        '200':
+          description: A payment-method token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, example: tok_ok }
+                  object: { type: string, example: token }
+                  card:
+                    type: object
+                    properties:
+                      brand: { type: string, example: visa }
+                      last4: { type: string, example: "4242" }
+                      exp_month: { type: integer, example: 12 }
+                      exp_year: { type: integer, example: 2030 }
+        '400': { description: Invalid card fields, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Missing/invalid key, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Secret key used (publishable required), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /v1/payment_intents:
     post:
