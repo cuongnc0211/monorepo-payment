@@ -40,6 +40,10 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 
 	r.GET("/v1/health", health)
 
+	// Public, browsable API docs (Scalar) + the raw spec. No auth — docs are public.
+	r.GET("/docs", docsPage)
+	r.GET("/openapi.yaml", openapiSpec)
+
 	// Portal login is public (it mints the session); it is reachable cross-origin via the CORS
 	// layer above. It is NOT under the API-key group.
 	r.POST("/v1/portal/login", session.login)
