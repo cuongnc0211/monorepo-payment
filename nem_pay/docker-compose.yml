@@ -94,5 +94,19 @@ services:
     ports:
       - "${NEMPAY_BANKSIM_PORT:-9090}:9090"
 
+  # Merchant dashboard (React SPA). Part of NemPay (not a separate merchant), so it ships in this
+  # compose. Built to a static bundle and served by nginx. The API base URL is baked at build time
+  # and points at the host-published gateway, since the SPA runs in the browser. Its origin
+  # (http://localhost:5173) is in the api's default CORS allow-set.
+  portal:
+    build:
+      context: ./portal
+      args:
+        VITE_NEMPAY_API_URL: "${NEMPAY_PORTAL_API_URL:-http://localhost:8080}"
+    depends_on:
+      - api
+    ports:
+      - "${NEMPAY_PORTAL_PORT:-5173}:80"
+
 volumes:
   pgdata:
