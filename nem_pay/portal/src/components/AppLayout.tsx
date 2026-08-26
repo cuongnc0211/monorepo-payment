@@ -3,7 +3,8 @@ import { useAuth } from "../auth/auth";
 import { apiBaseUrl } from "../api/client";
 
 const NAV = [
-  { to: "/", label: "Payments", end: true },
+  { to: "/", label: "Overview", end: true },
+  { to: "/payments", label: "Payments", end: false },
   { to: "/balances", label: "Balances", end: false },
   { to: "/webhooks", label: "Webhooks", end: false },
   { to: "/keys", label: "API keys", end: false },

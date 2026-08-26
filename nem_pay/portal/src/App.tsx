@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
+import Overview from "./pages/Overview";
 import Payments from "./pages/Payments";
 import PaymentDetail from "./pages/PaymentDetail";
 import Balances from "./pages/Balances";
@@ -20,7 +21,8 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Payments />} />
+        <Route index element={<Overview />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="payments/:id" element={<PaymentDetail />} />
         <Route path="balances" element={<Balances />} />
         <Route path="webhooks" element={<Webhooks />} />

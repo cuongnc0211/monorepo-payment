@@ -68,3 +68,10 @@ tbody tr.clickable:hover { cursor: pointer; }
 .card__value { font-size: 1.5rem; margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
 .empty, .loading { color: var(--muted); padding: 2rem 0; }
 .back { color: var(--accent); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; }
+
+/* ---------- overview ---------- */
+.overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem; margin-top: 2rem; }
+@media (max-width: 900px) { .overview-grid { grid-template-columns: 1fr; } }
+.section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 0.8rem; }
+.section-title h2 { font-size: 1rem; margin: 0; }
+.section-title a { color: var(--accent); font-size: 0.82rem; }
