@@ -138,6 +138,7 @@ paths:
   /v1/portal/login:
     post:
       summary: Portal login — exchange credentials for a session token (public)
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
       security: []
       requestBody:
         required: true
@@ -169,6 +170,7 @@ paths:
   /v1/balances:
     get:
       summary: Derived balances (by type/kind/currency) for the authenticated merchant
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
       security: [{ SecretKey: [] }, { Session: [] }]
       responses:
         '200':
@@ -191,6 +193,7 @@ paths:
   /v1/webhook_events:
     get:
       summary: Emitted webhook events for the merchant (newest first)
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
       security: [{ SecretKey: [] }, { Session: [] }]
       parameters:
         - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
@@ -218,6 +221,7 @@ paths:
   /v1/api_keys:
     get:
       summary: The merchant's API keys (secret masked — prefix only)
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
       security: [{ SecretKey: [] }, { Session: [] }]
       responses:
         '200':
@@ -242,6 +246,7 @@ paths:
   /v1/payment_intents/{id}/ledger:
     get:
       summary: The ledger transaction(s)/entries backing one intent
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
       security: [{ SecretKey: [] }, { Session: [] }]
       parameters:
         - { in: path, name: id, required: true, schema: { type: string } }
