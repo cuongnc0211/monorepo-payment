@@ -3,9 +3,10 @@ info:
   title: NemPay API
   version: "1.0.0-M1"
   description: >
-    NemPay direct-capture gateway (Milestone M1). Hand-maintained and kept in step with the
-    handlers in internal/httpapi. Money verbs (confirm/capture/refund) and webhook config are
-    added in later tasks. The M2/M4 merchants generate their clients from this file.
+    NemPay payment gateway (direct-capture + escrow). The merchant-integration surface: create a
+    payment intent, tokenize a card, then confirm/capture/refund (and release for escrow).
+    Hand-maintained in step with the handlers in internal/httpapi. Portal-only endpoints are marked
+    x-internal and hidden here. Merchants generate their clients from this file.
 servers:
   - url: http://localhost:8080
     description: Local docker-compose
@@ -59,8 +60,8 @@ components:
         currency: { type: string, minLength: 3, maxLength: 3, example: USD }
         status:
           type: string
-          enum: [created, requires_confirmation, authorized, captured, settled, failed, refunded, partially_refunded]
-        settlement_mode: { type: string, enum: [direct] }
+          enum: [created, requires_confirmation, authorized, captured, settled, held_in_escrow, released, failed, refunded, partially_refunded]
+        settlement_mode: { type: string, enum: [direct, escrow] }
         metadata: { type: object, additionalProperties: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -331,3 +332,101 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PaymentIntent' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/payment_intents/{id}/confirm:
+    post:
+      summary: Confirm a payment intent with a tokenized payment method
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required on every money-mutating POST; retries replay the stored response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, description: A payment-method token from /v1/tokens, example: tok_ok }
+      responses:
+        '200':
+          description: The updated intent (authorized on success; failed on a declined card)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '400': { description: Missing/invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Illegal state transition, or an in-flight idempotent request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/payment_intents/{id}/capture:
+    post:
+      summary: Capture an authorized payment intent
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The captured intent (direct → captured/settled; escrow → held_in_escrow after settle)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Illegal state transition, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/payment_intents/{id}/refund:
+    post:
+      summary: Refund a captured payment intent (full or partial)
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, format: int64, description: Minor units to refund; omit or 0 for a full refund }
+      responses:
+        '200':
+          description: The refunded intent (refunded or partially_refunded)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Illegal state transition, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/payment_intents/{id}/release:
+    post:
+      summary: Release escrowed funds to the payee (escrow mode only)
+      description: >
+        Escrow-only. Moves the held funds to the payee minus the application fee and marks the intent
+        released. Explicit and idempotent; called by the platform once the job is confirmed done.
+      security: [{ SecretKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The released intent (status released)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Not an escrow intent, or illegal state transition, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
