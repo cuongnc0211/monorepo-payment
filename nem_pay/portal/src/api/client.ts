@@ -4,7 +4,9 @@ import { getToken, clearToken } from "../auth/token";
 
 // The gateway base URL. Same-origin dev default is the local gateway; override via env for other
 // setups. All portal data flows through this typed /v1 client — no hand-written fetch, no backdoor.
-const baseUrl = (import.meta.env.VITE_NEMPAY_API_URL as string | undefined) ?? "http://localhost:8080";
+// Exported so the UI can link to gateway-served pages (e.g. the API docs at /docs).
+export const apiBaseUrl = (import.meta.env.VITE_NEMPAY_API_URL as string | undefined) ?? "http://localhost:8080";
+const baseUrl = apiBaseUrl;
 
 // A 401 (expired/invalid session) clears the token and notifies the app to bounce to login.
 let onUnauthorized: (() => void) | null = null;

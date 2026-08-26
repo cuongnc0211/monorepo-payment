@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/auth";
+import { apiBaseUrl } from "../api/client";
 
 const NAV = [
   { to: "/", label: "Payments", end: true },
@@ -20,6 +21,7 @@ export default function AppLayout() {
               {n.label}
             </NavLink>
           ))}
+          <a href={`${apiBaseUrl}/docs`} target="_blank" rel="noreferrer">API docs ↗</a>
         </nav>
         <div className="sidebar__foot">
           <div className="muted">{merchant?.name}</div>

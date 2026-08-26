@@ -217,9 +217,10 @@ vs merchants = ActiveRecord), never inside the money system.
 ```
 monorepo-payment/
 ├── nem_pay/          Payment gateway — Go API + asynq worker + bank simulator
-│   ├── api/          Gin · sqlc · double-entry ledger · idempotency · outbox
+│   ├── api/          Gin · sqlc · double-entry ledger · idempotency · outbox · API docs at /docs
+│   ├── portal/       React dashboard — read-only, multi-tenant merchant portal over /v1
 │   ├── bank-sim/     fake acquirer (approved / declined / timeout)
-│   └── docker-compose.yml   one command brings up the whole gateway
+│   └── docker-compose.yml   one command brings up the whole gateway + portal
 ├── Nem_luxury/       Direct-capture merchant (Rails 8) — the reference integration
 ├── Nem_tasker/       Escrow merchant (Rails) — future work
 ├── specs/            WHAT & WHY — the contract for each feature (spec-first)
@@ -274,10 +275,13 @@ cd Nem_luxury && bundle exec rspec
 ## Run it locally
 
 ```bash
-# 1. Bring up the whole gateway (Postgres + Redis + api + worker + bank-sim)
+# 1. Bring up the whole gateway (Postgres + Redis + api + worker + bank-sim + portal)
 cd nem_pay
 docker-compose up --build
 #    → /v1 listening on http://localhost:8080; dev API keys printed in the logs
+#    → interactive API docs (Scalar) at  http://localhost:8080/docs
+#    → merchant portal (dashboard)  at   http://localhost:5173
+#         dev login: owner@merchant-a.test / portal-dev-password  (owner@merchant-b.test = a second tenant)
 
 # 2. Start the merchant, pointed at the gateway
 cd ../Nem_luxury
