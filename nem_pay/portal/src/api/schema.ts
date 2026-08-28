@@ -408,6 +408,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/webhook_endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the merchant's webhook endpoints (secret omitted) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The merchant's endpoints */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            webhook_endpoints?: {
+                                id?: string;
+                                url?: string;
+                                active?: boolean;
+                                /** Format: date-time */
+                                created_at?: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a webhook endpoint (config write; non-money) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example https://merchant.example/webhooks */
+                        url: string;
+                        /** @description HMAC signing secret; write-only */
+                        secret: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The created endpoint */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id?: string;
+                            url?: string;
+                            active?: boolean;
+                            /** Format: date-time */
+                            created_at?: string;
+                        };
+                    };
+                };
+                /** @description Invalid url or secret */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/webhook_endpoints/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a webhook endpoint (config write; non-money) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The disabled endpoint */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id?: string;
+                            url?: string;
+                            active?: boolean;
+                            /** Format: date-time */
+                            created_at?: string;
+                        };
+                    };
+                };
+                /** @description No such endpoint for this merchant */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/payment_intents/{id}/ledger": {
         parameters: {
             query?: never;

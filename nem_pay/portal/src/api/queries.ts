@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 
 const PAGE = 20;
@@ -68,6 +68,40 @@ export function useApiKeys() {
       if (error) throw new Error("failed to load API keys");
       return data;
     },
+  });
+}
+
+export function useWebhookEndpoints() {
+  return useQuery({
+    queryKey: ["webhook_endpoints"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/v1/webhook_endpoints", {});
+      if (error) throw new Error("failed to load endpoints");
+      return data;
+    },
+  });
+}
+
+export function useCreateEndpoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { url: string; secret: string }) => {
+      const { data, error } = await api.POST("/v1/webhook_endpoints", { body });
+      if (error) throw new Error("could not create the endpoint");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook_endpoints"] }),
+  });
+}
+
+export function useDisableEndpoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await api.POST("/v1/webhook_endpoints/{id}/disable", { params: { path: { id } } });
+      if (error) throw new Error("could not disable the endpoint");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook_endpoints"] }),
   });
 }
 

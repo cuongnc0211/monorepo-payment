@@ -75,3 +75,10 @@ tbody tr.clickable:hover { cursor: pointer; }
 .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 0.8rem; }
 .section-title h2 { font-size: 1rem; margin: 0; }
 .section-title a { color: var(--accent); font-size: 0.82rem; }
+
+/* ---------- inline form (config writes) ---------- */
+.inline-form { display: flex; gap: 0.6rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.inline-form input { flex: 1; min-width: 180px; padding: 0.55rem 0.75rem; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font-size: 0.9rem; }
+.inline-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.inline-form button { padding: 0.55rem 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #0b1220; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.inline-form button:disabled { opacity: 0.6; cursor: default; }
