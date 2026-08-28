@@ -66,6 +66,10 @@ services:
       # NEMPAY_WEBHOOK_SECRET.
       NEMPAY_DEV_WEBHOOK_URL: "${NEMPAY_DEV_WEBHOOK_URL:-http://host.docker.internal:3000/webhooks/nem_pay}"
       NEMPAY_DEV_WEBHOOK_SECRET: "${NEMPAY_DEV_WEBHOOK_SECRET:-whsec_nemluxury_dev}"
+      # Portal session token lifetimes (spec 007). Short access + longer refresh; override to
+      # exercise the refresh flow (e.g. NEMPAY_JWT_TTL=3s).
+      NEMPAY_JWT_TTL: "${NEMPAY_JWT_TTL:-15m}"
+      NEMPAY_JWT_REFRESH_TTL: "${NEMPAY_JWT_REFRESH_TTL:-12h}"
     ports:
       - "${NEMPAY_API_PORT:-8080}:8080"
 

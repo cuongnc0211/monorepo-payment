@@ -28,11 +28,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string): Promise<string | null> {
     const { data, error } = await api.POST("/v1/portal/login", { body: { email, password } });
-    if (error || !data?.token || !data.merchant) {
+    if (error || !data?.token || !data.refresh_token || !data.merchant) {
       return "The email or password is incorrect.";
     }
     const m = data.merchant as Merchant;
-    setSession(data.token, m);
+    setSession(data.token, data.refresh_token, m);
     setMerchant(m);
     return null;
   }

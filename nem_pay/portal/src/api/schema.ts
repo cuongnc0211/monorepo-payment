@@ -172,7 +172,10 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
+                            /** @description Short-lived access token */
                             token?: string;
+                            /** @description Longer-lived token; exchange at /v1/portal/refresh */
+                            refresh_token?: string;
                             /** Format: date-time */
                             expires_at?: string;
                             merchant?: {
@@ -183,6 +186,61 @@ export interface paths {
                     };
                 };
                 /** @description Invalid credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a refresh token for a new access token (public) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        refresh_token: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description A new access token (same merchant) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            token?: string;
+                            /** Format: date-time */
+                            expires_at?: string;
+                        };
+                    };
+                };
+                /** @description Invalid or expired refresh token */
                 401: {
                     headers: {
                         [name: string]: unknown;

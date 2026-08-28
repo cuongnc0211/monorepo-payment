@@ -1,21 +1,30 @@
-// Session token store — IN MEMORY ONLY, never localStorage (constitution: portal auth is held in
-// memory). A full-page reload drops the session and the user logs in again (no refresh in the first
-// cut). Kept outside React so the API client middleware can read it without a hook.
+// Session tokens — IN MEMORY ONLY, never localStorage/cookie (constitution). Both the short-lived
+// access token and the longer-lived refresh token live only in the running page; a full reload
+// drops them and the user logs in again (reload-persistence is out of scope, spec 007).
 
 type Merchant = { id: string; name: string };
 
-let token: string | null = null;
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
 let merchant: Merchant | null = null;
 
-export const getToken = (): string | null => token;
+export const getToken = (): string | null => accessToken;
+export const getRefreshToken = (): string | null => refreshToken;
 export const getMerchant = (): Merchant | null => merchant;
 
-export function setSession(t: string, m: Merchant): void {
-  token = t;
+export function setSession(access: string, refresh: string, m: Merchant): void {
+  accessToken = access;
+  refreshToken = refresh;
   merchant = m;
 }
 
+// setAccessToken updates just the access token after a refresh (the refresh token is unchanged).
+export function setAccessToken(access: string): void {
+  accessToken = access;
+}
+
 export function clearToken(): void {
-  token = null;
+  accessToken = null;
+  refreshToken = null;
   merchant = null;
 }
