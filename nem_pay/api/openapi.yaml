@@ -271,6 +271,77 @@ paths:
                         created_at: { type: string, format: date-time }
                         revoked_at: { type: string, format: date-time, nullable: true }
 
+  /v1/webhook_endpoints:
+    get:
+      summary: List the merchant's webhook endpoints (secret omitted)
+      x-internal: true   # portal/config surface; hidden from the integration docs
+      security: [{ SecretKey: [] }, { Session: [] }]
+      responses:
+        '200':
+          description: The merchant's endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook_endpoints:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        url: { type: string }
+                        active: { type: boolean }
+                        created_at: { type: string, format: date-time }
+    post:
+      summary: Create a webhook endpoint (config write; non-money)
+      x-internal: true
+      security: [{ SecretKey: [] }, { Session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, secret]
+              properties:
+                url: { type: string, example: https://merchant.example/webhooks }
+                secret: { type: string, description: HMAC signing secret; write-only, never returned }
+      responses:
+        '200':
+          description: The created endpoint
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  url: { type: string }
+                  active: { type: boolean }
+                  created_at: { type: string, format: date-time }
+        '400': { description: Invalid url or secret, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/webhook_endpoints/{id}/disable:
+    post:
+      summary: Disable a webhook endpoint (config write; non-money)
+      x-internal: true
+      security: [{ SecretKey: [] }, { Session: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The disabled endpoint
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  url: { type: string }
+                  active: { type: boolean }
+                  created_at: { type: string, format: date-time }
+        '404': { description: No such endpoint for this merchant, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /v1/payment_intents/{id}/ledger:
     get:
       summary: The ledger transaction(s)/entries backing one intent

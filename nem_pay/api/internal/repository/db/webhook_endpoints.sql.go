@@ -11,6 +11,33 @@ import (
 	"github.com/google/uuid"
 )
 
+const disableEndpoint = `-- name: DisableEndpoint :one
+UPDATE webhook_endpoints
+SET disabled_at = now()
+WHERE id = $1 AND merchant_id = $2 AND disabled_at IS NULL
+RETURNING id, merchant_id, url, secret, created_at, disabled_at
+`
+
+type DisableEndpointParams struct {
+	ID         uuid.UUID `json:"id"`
+	MerchantID uuid.UUID `json:"merchant_id"`
+}
+
+// Disable one of a merchant's endpoints. Scoped by merchant so another merchant's id matches no row.
+func (q *Queries) DisableEndpoint(ctx context.Context, arg DisableEndpointParams) (WebhookEndpoint, error) {
+	row := q.db.QueryRow(ctx, disableEndpoint, arg.ID, arg.MerchantID)
+	var i WebhookEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.Url,
+		&i.Secret,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const insertWebhookEndpoint = `-- name: InsertWebhookEndpoint :one
 INSERT INTO webhook_endpoints (merchant_id, url, secret)
 VALUES ($1, $2, $3)
@@ -46,6 +73,40 @@ ORDER BY created_at
 // Active (non-disabled) endpoints for a merchant — where its events are delivered.
 func (q *Queries) ListActiveEndpoints(ctx context.Context, merchantID uuid.UUID) ([]WebhookEndpoint, error) {
 	rows, err := q.db.Query(ctx, listActiveEndpoints, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookEndpoint
+	for rows.Next() {
+		var i WebhookEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Url,
+			&i.Secret,
+			&i.CreatedAt,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEndpoints = `-- name: ListEndpoints :many
+SELECT id, merchant_id, url, secret, created_at, disabled_at FROM webhook_endpoints
+WHERE merchant_id = $1
+ORDER BY created_at DESC
+`
+
+// All of a merchant's endpoints (including disabled), for the portal management view.
+func (q *Queries) ListEndpoints(ctx context.Context, merchantID uuid.UUID) ([]WebhookEndpoint, error) {
+	rows, err := q.db.Query(ctx, listEndpoints, merchantID)
 	if err != nil {
 		return nil, err
 	}

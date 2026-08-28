@@ -81,6 +81,12 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	reads.GET("/webhook_events", portal.webhookEvents)
 	reads.GET("/api_keys", portal.apiKeys)
 
+	// Config writes — session OR key, tenant-scoped, NON-money (no ledger, no balance). The portal's
+	// only writes; money routes stay secret-key-only so a session still cannot move money.
+	reads.GET("/webhook_endpoints", portal.listEndpoints)
+	reads.POST("/webhook_endpoints", portal.createEndpoint)
+	reads.POST("/webhook_endpoints/:id/disable", portal.disableEndpoint)
+
 	return r
 }
 
