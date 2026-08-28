@@ -45,8 +45,10 @@ func NewRouter(pool *pgxpool.Pool, bank *banksim.Client) *gin.Engine {
 	r.GET("/openapi.yaml", openapiSpec)
 
 	// Portal login is public (it mints the session); it is reachable cross-origin via the CORS
-	// layer above. It is NOT under the API-key group.
+	// layer above. It is NOT under the API-key group. Refresh exchanges a refresh token for a new
+	// access token — also public (the refresh token is the credential).
 	r.POST("/v1/portal/login", session.login)
+	r.POST("/v1/portal/refresh", session.refresh)
 
 	// Authenticated surface. Auth is applied PER GROUP (not on the whole /v1) so the read group can
 	// accept a portal session as well as an API key.

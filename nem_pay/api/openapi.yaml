@@ -159,7 +159,8 @@ paths:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
+                  token: { type: string, description: Short-lived access token }
+                  refresh_token: { type: string, description: Longer-lived token; exchange at /v1/portal/refresh }
                   expires_at: { type: string, format: date-time }
                   merchant:
                     type: object
@@ -167,6 +168,32 @@ paths:
                       id: { type: string }
                       name: { type: string }
         '401': { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /v1/portal/refresh:
+    post:
+      summary: Exchange a refresh token for a new access token (public)
+      x-internal: true   # portal-only; hidden from the integration docs, still functional
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: A new access token (same merchant)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { description: Invalid or expired refresh token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /v1/balances:
     get:

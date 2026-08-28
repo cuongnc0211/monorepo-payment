@@ -87,6 +87,70 @@ func TestSession_IssueVerifyRoundTrip(t *testing.T) {
 	}
 }
 
+// login helper returning both tokens.
+func (f *apiFixture) login(t *testing.T, email, password string) (access, refresh string) {
+	t.Helper()
+	w := f.do(http.MethodPost, "/v1/portal/login", "", "",
+		`{"email":"`+email+`","password":"`+password+`"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login: %d (%s)", w.Code, w.Body.String())
+	}
+	var r struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &r)
+	return r.Token, r.RefreshToken
+}
+
+// AC1/AC2: login issues an access + refresh token, and the refresh token buys a new working access
+// token scoped to the same merchant.
+func TestRefresh_ExchangesForNewAccessToken(t *testing.T) {
+	f := newAPIFixture(t)
+	f.seedUser(t, "owner@test.example", "s3cret-pw")
+	access, refresh := f.login(t, "owner@test.example", "s3cret-pw")
+	if access == "" || refresh == "" {
+		t.Fatal("login must return both an access and a refresh token")
+	}
+
+	w := f.do(http.MethodPost, "/v1/portal/refresh", "", "", `{"refresh_token":"`+refresh+`"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("refresh: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var r struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &r)
+	if r.Token == "" {
+		t.Fatal("refresh must return a new access token")
+	}
+	// The new access token authorizes a read route (same merchant).
+	read := f.do(http.MethodGet, "/v1/payment_intents", r.Token, "", "")
+	if read.Code != http.StatusOK {
+		t.Fatalf("refreshed access token should read: got %d", read.Code)
+	}
+}
+
+// AC3/AC4: token types are non-interchangeable.
+func TestRefresh_TokenTypesAreDistinct(t *testing.T) {
+	f := newAPIFixture(t)
+	f.seedUser(t, "owner@test.example", "s3cret-pw")
+	access, refresh := f.login(t, "owner@test.example", "s3cret-pw")
+
+	// An access token at /refresh is refused.
+	if w := f.do(http.MethodPost, "/v1/portal/refresh", "", "", `{"refresh_token":"`+access+`"}`); w.Code != http.StatusUnauthorized {
+		t.Fatalf("access token at /refresh: want 401, got %d", w.Code)
+	}
+	// Garbage at /refresh is refused.
+	if w := f.do(http.MethodPost, "/v1/portal/refresh", "", "", `{"refresh_token":"not-a-token"}`); w.Code != http.StatusUnauthorized {
+		t.Fatalf("garbage at /refresh: want 401, got %d", w.Code)
+	}
+	// A refresh token on a read route is refused (it is not an access token).
+	if w := f.do(http.MethodGet, "/v1/payment_intents", refresh, "", ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh token on a read route: want 401, got %d", w.Code)
+	}
+}
+
 // A session token must never satisfy a money-mutating route (it is not an API key). This is the
 // guard behind AC10: a browser session cannot move money.
 func TestSession_RefusedOnMoneyRoute(t *testing.T) {
