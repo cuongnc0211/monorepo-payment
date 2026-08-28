@@ -1,6 +1,6 @@
 # Plan — Portal webhook endpoint management
 
-**ID:** 008-portal-webhook-management · **Status:** draft
+**ID:** 008-portal-webhook-management · **Status:** done
 **Spec:** ../../specs/008-portal-webhook-management/spec.md
 **Constitution:** ../../CLAUDE.md (+ nem_pay/CLAUDE.md)
 
@@ -47,5 +47,5 @@ page: list, an add form, and disable.
 - **Rollback:** additive — drop the three routes/handlers/queries and the portal section. No schema.
 
 ## Tasks (execute in order)
-- [ ] [task-01 — gateway: webhook-endpoint list/create/disable + tests](./task-01-gateway-endpoints.md)
-- [ ] [task-02 — portal: endpoints section on the Webhooks page](./task-02-portal-endpoints.md)
+- [x] [task-01 — gateway: webhook-endpoint list/create/disable + tests](./task-01-gateway-endpoints.md)
+- [x] [task-02 — portal: endpoints section on the Webhooks page](./task-02-portal-endpoints.md)
