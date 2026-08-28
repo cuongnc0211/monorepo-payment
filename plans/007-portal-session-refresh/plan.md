@@ -1,6 +1,6 @@
 # Plan — Portal session refresh
 
-**ID:** 007-portal-session-refresh · **Status:** draft
+**ID:** 007-portal-session-refresh · **Status:** done
 **Spec:** ../../specs/007-portal-session-refresh/spec.md
 **Constitution:** ../../CLAUDE.md (+ nem_pay/CLAUDE.md)
 
@@ -49,5 +49,5 @@ to login.
   behaviour. No migrations.
 
 ## Tasks (execute in order)
-- [ ] [task-01 — gateway: typed access/refresh tokens + /v1/portal/refresh + tests](./task-01-gateway-refresh.md)
-- [ ] [task-02 — portal: in-memory refresh token + transparent refresh-and-retry](./task-02-portal-refresh.md)
+- [x] [task-01 — gateway: typed access/refresh tokens + /v1/portal/refresh + tests](./task-01-gateway-refresh.md)
+- [x] [task-02 — portal: in-memory refresh token + transparent refresh-and-retry](./task-02-portal-refresh.md)
